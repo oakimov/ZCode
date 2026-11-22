@@ -15,7 +15,11 @@ import {
   resolvePackagedNodePtyPrebuildPath,
   restoreTargetNodePtyPrebuild,
 } from "./scripts/node-pty-package-assets.mjs";
-import { cleanupPackagedSourcemaps } from "./scripts/packaged-sourcemap-cleanup.mjs";
+import {
+  assertAsarPackageJson,
+  cleanupPackagedSourcemaps,
+  refreshElectronAsarIntegrity,
+} from "./scripts/packaged-sourcemap-cleanup.mjs";
 import { pruneIncompatiblePlatformPackages } from "./scripts/packaged-platform-dependency-prune.mjs";
 import { getTargetPlatform } from "./scripts/target-platform.mjs";
 import {
@@ -461,6 +465,10 @@ async function injectHoistedRuntimeModulesIntoAsar(context) {
         targetPlatformKey: targetPlatform.key,
         runAsarCommand,
       }),
+    );
+    runTimedSync("afterPack:assert-asar-package-json", () => assertAsarPackageJson(appAsarPath));
+    runTimedSync("afterPack:refresh-asar-integrity", () =>
+      refreshElectronAsarIntegrity(resolvePackagedResourcesDir(context), appAsarPath),
     );
   } finally {
     rmSync(stagingDir, { force: true, recursive: true });

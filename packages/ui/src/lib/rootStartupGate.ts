@@ -48,11 +48,13 @@ export function shouldShowRootStartupLoading(
 }
 
 export function shouldEnableProviderAvailabilityLoginEntryGuard(
-  state: ProviderAvailabilityLoginEntryGuardState,
+  _state: ProviderAvailabilityLoginEntryGuardState,
 ): boolean {
-  // 修复原因：手机 Web 远控只 attachment 到桌面已有 host，不能用本地空 provider
-  // 快照触发登录页，否则断连/home-only 首页会被 WelcomeScreen 覆盖。
-  return !state.isWebRemoteControlRoot;
+  // 本 fork：永久关闭启动时因无可用 provider 强制弹出的 WelcomeScreen / z.ai 登录。
+  // Settings、手动 Login、session-expired、logout-provider-required 仍可打开登录入口。
+  // 手机 Web 远控原本也不启用该守卫（避免空 provider 覆盖远控首页）。
+  // 规则见 docs/desktop/fork-suppress-startup-login.md。
+  return false;
 }
 
 export function shouldResolveProviderStartupState(

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  assertValidPackageJsonSource,
   removeSourceMapFilesInDirectory,
   stripSourceMappingUrlComments,
   stripSourceMappingUrlCommentsInDirectory,
@@ -50,5 +51,21 @@ describe("packaged sourcemap cleanup", () => {
     } finally {
       rmSync(rootDir, { force: true, recursive: true });
     }
+  });
+
+  it("应拒绝损坏的 package.json，避免打出无法启动的安装包", () => {
+    expect(() =>
+      assertValidPackageJsonSource(
+        '1707],"version":"6.0.2"}{"name":"@zcode/desktop","main":"out/main/index.js"}',
+        "fixture",
+      ),
+    ).toThrow(/invalid package\.json \(fixture\)/);
+
+    expect(
+      assertValidPackageJsonSource(
+        JSON.stringify({ name: "@zcode/desktop", main: "out/main/index.js" }),
+        "fixture",
+      ),
+    ).toMatchObject({ main: "out/main/index.js" });
   });
 });

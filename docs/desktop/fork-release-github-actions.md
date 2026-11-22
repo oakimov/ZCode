@@ -5,6 +5,8 @@
 `oakimov/ZCode` 通过 `.github/workflows/release-desktop.yml` 构建桌面安装包，并上传到
 GitHub Releases。本 fork 的遥测 / ARMS / OTEL / 自动更新永久硬关闭，见
 [build-time-optional-capabilities.md](./build-time-optional-capabilities.md)。
+启动时因无可用 provider 强制弹出的登录入口也永久关闭，见
+[fork-suppress-startup-login.md](./fork-suppress-startup-login.md)。
 
 ## 触发
 
