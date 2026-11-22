@@ -3,7 +3,6 @@ import {
   createUuid,
   ZCODE_VERSION,
   ZCODE_ENV,
-  ZCODE_TELEMETRY_REPORT_ENDPOINT,
   buildZCodeSourceHeadersFromContext,
   rewriteZCodeEndpointUrl,
   sanitizeTelemetryEventDetail,
@@ -18,7 +17,8 @@ import { dirname, join } from "node:path";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { getAppConfigDir } from "../paths.js";
 
-const REPORT_ENDPOINT = ZCODE_TELEMETRY_REPORT_ENDPOINT;
+// 本公开 fork 永久硬关闭事件上报：不信任构建 define / env 重新打开。
+const REPORT_ENDPOINT = "";
 
 function sessionCreateEventId(userId: string, sessionId: string): string {
   const bytes = createHash("sha256")
@@ -421,7 +421,7 @@ export function createTelemetryCore(dependencies: TelemetryCoreDependencies = {}
     userId: string,
     deviceMid: string,
   ): Promise<void> {
-    // 构建期未配置事件上报端点时不上报（见 docs/desktop/build-time-optional-capabilities.md）
+    // 本 fork 永久硬关闭：事件上报端点恒为空，见 docs/desktop/build-time-optional-capabilities.md
     if (!REPORT_ENDPOINT) return;
     // body 的 client_language 与 X-Client-Language 同源，都取发送时刻的界面语言。
     const hostClientLanguage = dependencies.resolveClientLanguage?.()?.trim();

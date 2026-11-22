@@ -1,43 +1,49 @@
-# 桌面构建期可选能力
+# 桌面构建期可选能力（本 fork：永久关闭）
 
 ## 目标
 
-三项能力由构建期配置决定是否启用，未配置时一律关闭：
+本公开 fork 将下列能力**永久硬关闭**：不能通过设置、环境变量或
+`config/private/build-defaults.json` 重新打开。
 
 | 能力 | 配置项 | 关闭时的行为 |
 | --- | --- | --- |
 | ARMS RUM 上报 | `ZCODE_ARMS_RUM_ENDPOINT` | 主进程与渲染进程的 ARMS SDK 以 `enable: false` 初始化，不产生上报 |
 | 事件上报（数仓） | `ZCODE_TELEMETRY_REPORT_ENDPOINT` | 遥测事件在发送前直接返回 |
-| 自动更新 | `ZCODE_AUTO_UPDATE`（`1`、`true`、`yes` 为启用） | 与 Preview 形态相同，不检查、不下载更新 |
+| 自动更新 | `ZCODE_AUTO_UPDATE` | 不检查、不下载更新 |
+| Packaged Agent OTLP | `ZCODE_PACKAGED_AGENT_OTEL_*` | Desktop 打包永不注入 OTEL 环境 |
+| CLI 模型遥测 | `ZCODE_MODEL_TELEMETRY_ENABLED` / OTLP endpoint | `prepareModelTelemetryEnv` 永久 no-op |
 
-这样同一份源码可以产出“默认不上报、不自动更新”的构建，也可以产出启用这些能力的正式构建，
-不需要在源码里写死上报地址。
+## 配置来源（本 fork）
 
-## 配置来源与优先级
+`scripts/build-time-config.mjs` 是唯一解析入口，但**固定返回空端点与
+`autoUpdateEnabled: false`**，并忽略：
 
-1. 构建进程的环境变量。显式设置为空字符串表示关闭。
-2. `config/private/build-defaults.json`。只存在于内部仓库，开源导出不包含。
-3. 以上都没有时关闭。
+1. 构建进程环境变量（即使显式设置非空值）
+2. `config/private/build-defaults.json`（即使文件存在）
+
+`packages/shared/src/env.ts` 与运行时代码再做一层硬锁定，避免 define / 运行时
+env 绕过。CI 通过 `scripts/assert-telemetry-hard-disabled.mjs` fail-closed。
 
 ## 所有者与数据流
 
 ```
-环境变量 / config/private/build-defaults.json
-        │ scripts/build-time-config.mjs（唯一解析入口）
+scripts/build-time-config.mjs（硬返回关闭）
         ▼
-desktop tsup（main、host、preload）与 desktop vite（renderer）的 define
-        │ __ZCODE_ARMS_RUM_ENDPOINT__ / __ZCODE_TELEMETRY_REPORT_ENDPOINT__ / __ZCODE_AUTO_UPDATE_ENABLED__
+desktop tsup / vite define（恒为空 / false）
         ▼
-@zcode/shared env 常量 ── 运行时代码只读这些常量
+@zcode/shared env 常量（恒为空 / false，忽略 define）
+        ▼
+ARMS / telemetryCore / autoUpdater / packaged Agent OTEL / CLI model telemetry
+均为 no-op
 ```
 
-- 未注入 define 的环境（测试、其他 bundle）得到关闭值；vitest 为测试注入固定的事件上报端点，以便验证上报链路。
-- 自动更新在 Desktop Main 启动时判定：`ZCODE_PRODUCT_FLAVOR === "production" && ZCODE_AUTO_UPDATE_ENABLED`。
-- Agent 的 OTLP 遥测沿用既有机制，由打包环境的 `ZCODE_PACKAGED_AGENT_OTEL_*` 注入，不在本文件范围内。
+- 自动更新判定：`ZCODE_PRODUCT_FLAVOR === "production" && ZCODE_AUTO_UPDATE_ENABLED`；
+  后者在本 fork 恒为 `false`。
+- Agent OTLP：`resolveBuildPackagedAgentTelemetryEnv` 恒返回 `{}`，release/CI 也不再要求配置。
 
 ## 验收
 
-1. 内部仓库存在私有默认配置时，构建结果与改造前一致：ARMS、事件上报、自动更新均启用，地址不变。
-2. 没有私有默认配置、也没有环境变量时，三项均关闭。
-3. 环境变量优先于私有默认配置，显式空字符串可以关闭单项能力。
-4. 类型检查、Lint 与相关单测通过。
+1. 存在私有默认配置或非空遥测相关环境变量时，构建结果仍全部关闭。
+2. `node --test scripts/test/build-time-config.test.mjs` 通过。
+3. `node scripts/assert-telemetry-hard-disabled.mjs` 在 CI 与本地均可证明关闭态。
+4. 类型检查、Lint 与相关工程测试通过。

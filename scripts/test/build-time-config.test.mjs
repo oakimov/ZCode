@@ -15,29 +15,27 @@ async function writeDefaults(name, content) {
   return path;
 }
 
+const DISABLED = {
+  armsRumEndpoint: "",
+  telemetryReportEndpoint: "",
+  autoUpdateEnabled: false,
+};
+
 test("没有私有默认配置也没有环境变量时三项能力都关闭", async () => {
   const config = await resolveBuildTimeConfig({}, { defaultsPath: join(dir, "missing.json") });
-  assert.deepEqual(config, {
-    armsRumEndpoint: "",
-    telemetryReportEndpoint: "",
-    autoUpdateEnabled: false,
-  });
+  assert.deepEqual(config, DISABLED);
 });
 
-test("私有默认配置启用三项能力", async () => {
+test("私有默认配置也不能重新打开三项能力", async () => {
   const defaultsPath = await writeDefaults("defaults.json", {
     ZCODE_ARMS_RUM_ENDPOINT: " https://rum.example.com/x ",
     ZCODE_TELEMETRY_REPORT_ENDPOINT: "https://report.example.com/event",
     ZCODE_AUTO_UPDATE: "1",
   });
-  assert.deepEqual(await resolveBuildTimeConfig({}, { defaultsPath }), {
-    armsRumEndpoint: "https://rum.example.com/x",
-    telemetryReportEndpoint: "https://report.example.com/event",
-    autoUpdateEnabled: true,
-  });
+  assert.deepEqual(await resolveBuildTimeConfig({}, { defaultsPath }), DISABLED);
 });
 
-test("环境变量优先于私有默认配置，显式空字符串关闭单项能力", async () => {
+test("环境变量也不能重新打开三项能力", async () => {
   const defaultsPath = await writeDefaults("override.json", {
     ZCODE_ARMS_RUM_ENDPOINT: "https://rum.example.com/x",
     ZCODE_TELEMETRY_REPORT_ENDPOINT: "https://report.example.com/event",
@@ -45,35 +43,26 @@ test("环境变量优先于私有默认配置，显式空字符串关闭单项�
   });
   const config = await resolveBuildTimeConfig(
     {
-      ZCODE_ARMS_RUM_ENDPOINT: "",
+      ZCODE_ARMS_RUM_ENDPOINT: "https://rum.example.com/x",
       ZCODE_TELEMETRY_REPORT_ENDPOINT: "https://other.example.com/event",
-      ZCODE_AUTO_UPDATE: "0",
+      ZCODE_AUTO_UPDATE: "1",
     },
     { defaultsPath },
   );
-  assert.deepEqual(config, {
-    armsRumEndpoint: "",
-    telemetryReportEndpoint: "https://other.example.com/event",
-    autoUpdateEnabled: false,
-  });
+  assert.deepEqual(config, DISABLED);
 });
 
-test("私有默认配置格式错误时直接报错，不静默关闭", async () => {
-  const defaultsPath = await writeDefaults("broken.json", "[1]");
-  await assert.rejects(resolveBuildTimeConfig({}, { defaultsPath }), /必须是 JSON 对象/);
-});
-
-test("define 以 JSON 字面量注入", () => {
+test("define 恒为关闭字面量，忽略入参", () => {
   assert.deepEqual(
     createBuildTimeConfigDefines({
       armsRumEndpoint: "https://rum.example.com/x",
-      telemetryReportEndpoint: "",
+      telemetryReportEndpoint: "https://report.example.com/event",
       autoUpdateEnabled: true,
     }),
     {
-      __ZCODE_ARMS_RUM_ENDPOINT__: '"https://rum.example.com/x"',
+      __ZCODE_ARMS_RUM_ENDPOINT__: '""',
       __ZCODE_TELEMETRY_REPORT_ENDPOINT__: '""',
-      __ZCODE_AUTO_UPDATE_ENABLED__: "true",
+      __ZCODE_AUTO_UPDATE_ENABLED__: "false",
     },
   );
 });

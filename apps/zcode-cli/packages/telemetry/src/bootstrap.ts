@@ -119,21 +119,11 @@ export function parseOtlpHeaders(value: string | undefined): Record<string, stri
  */
 export async function prepareModelTelemetryEnv(
   env: EnvRecord,
-  options: PrepareModelTelemetryOptions = {},
+  _options: PrepareModelTelemetryOptions = {},
 ): Promise<EnvRecord> {
-  if (!resolveOtlpTraceEndpoint(env) || isExplicitlyDisabled(env.ZCODE_MODEL_TELEMETRY_ENABLED)) {
-    return env;
-  }
-  const existingInstallationId = normalizeTelemetryDeviceMid(env.ZCODE_TELEMETRY_DEVICE_MID);
-  const installationId =
-    existingInstallationId ?? (await resolveStandaloneDeviceMid(env.ZCODE_HOME?.trim()));
-  const preparedEnv = installationId ? { ...env, ZCODE_TELEMETRY_DEVICE_MID: installationId } : env;
-
-  if (!preparingOwner && !preparedOwner) {
-    preparingOwner = createPreparedOwner(preparedEnv, options);
-  }
-  preparedOwner = await preparingOwner;
-  return preparedEnv;
+  // 本公开 fork 永久硬关闭模型遥测：忽略 OTLP endpoint 与 ZCODE_MODEL_TELEMETRY_ENABLED。
+  // 见 docs/desktop/build-time-optional-capabilities.md。
+  return env;
 }
 
 export async function shutdownPreparedModelTelemetry(): Promise<void> {
@@ -409,10 +399,6 @@ function validHttpUrl(value: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function isExplicitlyDisabled(value: string | undefined): boolean {
-  return ["0", "false", "off", "disabled"].includes(value?.trim().toLowerCase() ?? "");
 }
 
 function safeDecode(value: string): string {
