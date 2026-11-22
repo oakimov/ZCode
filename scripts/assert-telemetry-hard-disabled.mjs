@@ -15,6 +15,9 @@ const FORBIDDEN_ENV_KEYS = [
   "ZCODE_PACKAGED_AGENT_OTEL_SERVICE_NAME",
   "OTEL_EXPORTER_OTLP_ENDPOINT",
   "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+  "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+  "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+  "OTEL_EXPORTER_OTLP_METRICS_HEADERS",
   "OTEL_EXPORTER_OTLP_HEADERS",
 ];
 
@@ -46,7 +49,7 @@ if (
   config.telemetryReportEndpoint !== "" ||
   config.autoUpdateEnabled !== false
 ) {
-  fail(`resolveBuildTimeConfig returned enabled config: ${JSON.stringify(config)}`);
+  fail("resolveBuildTimeConfig returned enabled config");
 }
 
 const defines = createBuildTimeConfigDefines({
@@ -59,7 +62,7 @@ if (
   defines.__ZCODE_TELEMETRY_REPORT_ENDPOINT__ !== '""' ||
   defines.__ZCODE_AUTO_UPDATE_ENABLED__ !== "false"
 ) {
-  fail(`createBuildTimeConfigDefines returned non-disabled defines: ${JSON.stringify(defines)}`);
+  fail("createBuildTimeConfigDefines returned non-disabled defines");
 }
 
 console.log("[telemetry-hard-disabled] OK: telemetry/ARMS/OTEL/auto-update stay disabled");

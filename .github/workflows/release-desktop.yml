@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to create or update (e.g. v3.18.2-fork.1). Leave empty to use the triggering ref name."
+        description: "Release tag (e.g. v3.18.2-fork.1). Defaults to the triggering tag or desktop-<commit SHA>."
         required: false
         type: string
       os:
@@ -22,7 +22,7 @@ on:
           - all
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   # 本公开 fork：遥测 / ARMS / OTEL / 自动更新永久硬关闭；CI 显式清空，避免 runner 环境泄漏。
@@ -35,6 +35,9 @@ env:
   ZCODE_MODEL_TELEMETRY_ENABLED: "0"
   OTEL_EXPORTER_OTLP_ENDPOINT: ""
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ""
+  OTEL_EXPORTER_OTLP_TRACES_HEADERS: ""
+  OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: ""
+  OTEL_EXPORTER_OTLP_METRICS_HEADERS: ""
   OTEL_EXPORTER_OTLP_HEADERS: ""
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
   ZCODE_ENABLE_MAC_SIGN: "0"
@@ -64,24 +67,32 @@ jobs:
             runner: macos-14
             os: mac
             arch: arm64
-            artifact_glob: packages/desktop/dist/*.{dmg,zip,yml,yaml,json,blockmap}
+            artifact_glob: |
+              packages/desktop/dist/*.dmg
+              packages/desktop/dist/*.zip
           - label: win-x64
             runner: windows-latest
             os: win
             arch: x64
-            artifact_glob: packages/desktop/dist/*.{exe,yml,yaml,json,blockmap}
+            artifact_glob: packages/desktop/dist/*.exe
           - label: linux-x64
             runner: ubuntu-latest
             os: linux
             arch: x64
-            artifact_glob: packages/desktop/dist/*.{AppImage,deb,rpm,yml,yaml,json}
+            artifact_glob: |
+              packages/desktop/dist/*.AppImage
+              packages/desktop/dist/*.deb
+              packages/desktop/dist/*.rpm
+              packages/desktop/dist/*.pkg.tar.zst
     steps:
       - name: Decide whether this matrix cell runs
         id: gate
         shell: bash
+        env:
+          REQUESTED_OS: ${{ github.event_name == 'workflow_dispatch' && inputs.os || 'all' }}
+          MATRIX_OS: ${{ matrix.os }}
         run: |
-          requested="${{ github.event_name == 'workflow_dispatch' && inputs.os || 'all' }}"
-          if [[ "$requested" == "all" || "$requested" == "${{ matrix.os }}" ]]; then
+          if [[ "$REQUESTED_OS" == "all" || "$REQUESTED_OS" == "$MATRIX_OS" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -89,11 +100,11 @@ jobs:
 
       - uses: actions/checkout@v4
         if: steps.gate.outputs.run == 'true'
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v4
         if: steps.gate.outputs.run == 'true'
-        with:
-          version: 10.33.2
 
       - uses: actions/setup-node@v4
         if: steps.gate.outputs.run == 'true'
@@ -110,6 +121,10 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         shell: bash
         run: pnpm bootstrap
+
+      - name: Install Linux packaging tools
+        if: steps.gate.outputs.run == 'true' && matrix.os == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools rpm
 
       - name: Bundle desktop installer
         if: steps.gate.outputs.run == 'true'
@@ -134,20 +149,33 @@ jobs:
     name: Publish GitHub Release
     needs: build-desktop
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: desktop-release-${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || format('desktop-{0}', github.sha) }}
+      queue: max
     steps:
       - uses: actions/checkout@v4
 
       - name: Resolve release tag
         id: tag
         shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.tag }}" ]]; then
-            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
-            echo "name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          if [[ -n "$REQUESTED_TAG" ]]; then
+            tag="$REQUESTED_TAG"
+          elif [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            tag="$GITHUB_REF_NAME"
           else
-            echo "name=desktop-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            tag="desktop-$GITHUB_SHA"
           fi
+          # Release action 会剥离 refs/tags/ 前缀，所以这里只接受合法的裸 tag 名。
+          if [[ "$tag" == refs/tags/* ]] || ! git check-ref-format "refs/tags/$tag"; then
+            echo "::error::Invalid release tag"
+            exit 1
+          fi
+          printf 'name=%s\n' "$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download all desktop artifacts
         uses: actions/download-artifact@v4
@@ -156,14 +184,25 @@ jobs:
           pattern: desktop-*
           merge-multiple: true
 
-      - name: List release assets
+      - name: Verify release tag matches build commit
         shell: bash
-        run: find release-assets -type f | sort
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          # target_commitish 只对新 tag 生效。已有 tag 必须对比 commit（附注 tag 要解引用）。
+          ref="refs/tags/$RELEASE_TAG"
+          refs="$(git ls-remote origin "$ref" "$ref^{}")"
+          commit="$(awk -v ref="$ref" '$2 == ref { direct = $1 } $2 == ref "^{}" { peeled = $1 } END { print peeled ? peeled : direct }' <<< "$refs")"
+          if [[ -n "$commit" && "$commit" != "$GITHUB_SHA" ]]; then
+            echo "::error::Release tag points to a different commit"
+            exit 1
+          fi
 
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.name }}
+          target_commitish: ${{ github.sha }}
           name: ZCode Desktop ${{ steps.tag.outputs.name }}
           generate_release_notes: true
           draft: false

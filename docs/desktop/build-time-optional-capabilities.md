@@ -5,13 +5,14 @@
 本公开 fork 将下列能力**永久硬关闭**：不能通过设置、环境变量或
 `config/private/build-defaults.json` 重新打开。
 
-| 能力 | 配置项 | 关闭时的行为 |
-| --- | --- | --- |
-| ARMS RUM 上报 | `ZCODE_ARMS_RUM_ENDPOINT` | 主进程与渲染进程的 ARMS SDK 以 `enable: false` 初始化，不产生上报 |
-| 事件上报（数仓） | `ZCODE_TELEMETRY_REPORT_ENDPOINT` | 遥测事件在发送前直接返回 |
-| 自动更新 | `ZCODE_AUTO_UPDATE` | 不检查、不下载更新 |
-| Packaged Agent OTLP | `ZCODE_PACKAGED_AGENT_OTEL_*` | Desktop 打包永不注入 OTEL 环境 |
-| CLI 模型遥测 | `ZCODE_MODEL_TELEMETRY_ENABLED` / OTLP endpoint | `prepareModelTelemetryEnv` 永久 no-op |
+| 能力                                       | 配置项                                          | 关闭时的行为                                                              |
+| ------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------- |
+| ARMS RUM 上报                              | `ZCODE_ARMS_RUM_ENDPOINT`                       | 主进程与渲染进程的 ARMS SDK 以 `enable: false` 初始化，不产生上报         |
+| 事件上报（数仓）                           | `ZCODE_TELEMETRY_REPORT_ENDPOINT`               | 上报入口直接返回，不读取凭据或更新上报状态                                |
+| 自动更新                                   | `ZCODE_AUTO_UPDATE`                             | 不检查、不下载更新                                                        |
+| Packaged Agent OTLP                        | `ZCODE_PACKAGED_AGENT_OTEL_*`                   | Desktop 打包永不注入 OTEL 环境                                            |
+| Desktop Renderer Action Trace / Local TTFT | OTLP endpoint、运行时开关和远端配置             | Main 不创建 exporter 或查询 trace rollout；Renderer 的 trace 配置保持关闭 |
+| CLI 模型遥测                               | `ZCODE_MODEL_TELEMETRY_ENABLED` / OTLP endpoint | `prepareModelTelemetryEnv` 永久 no-op                                     |
 
 ## 配置来源（本 fork）
 
@@ -45,5 +46,5 @@ ARMS / telemetryCore / autoUpdater / packaged Agent OTEL / CLI model telemetry
 
 1. 存在私有默认配置或非空遥测相关环境变量时，构建结果仍全部关闭。
 2. `node --test scripts/test/build-time-config.test.mjs` 通过。
-3. `node scripts/assert-telemetry-hard-disabled.mjs` 在 CI 与本地均可证明关闭态。
+3. `node scripts/assert-telemetry-hard-disabled.mjs` 在 CI 与本地检查遥测环境和构建期定义。运行时关闭态由对应入口的回归验证覆盖。
 4. 类型检查、Lint 与相关工程测试通过。

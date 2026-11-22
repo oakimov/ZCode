@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -81,28 +81,21 @@ describe("Telemetry V4 bootstrap", () => {
     });
   });
 
-  it("Standalone 异步生成并复用随机 installation id", async () => {
+  it("Standalone 忽略显式启用和 OTLP 配置，不创建 installation id 或运行时 Owner", async () => {
     const home = await mkdtemp(join(tmpdir(), "zcode-telemetry-"));
-    const env = {
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://127.0.0.1:1/v1/traces",
-      ZCODE_HOME: home,
-    };
-    const [first, second] = await Promise.all([
-      prepareModelTelemetryEnv(env, {
-        cliVersion: "0.16.1",
-        productVersion: "3.6.1",
-      }),
-      prepareModelTelemetryEnv(env, {
-        cliVersion: "0.16.1",
-        productVersion: "3.6.1",
-      }),
-    ]);
-
-    expect(first.ZCODE_TELEMETRY_DEVICE_MID).toMatch(/^[0-9a-f-]{36}$/u);
-    expect(second.ZCODE_TELEMETRY_DEVICE_MID).toBe(first.ZCODE_TELEMETRY_DEVICE_MID);
-    const state = JSON.parse(await readFile(join(home, "v2", "telemetry-state.json"), "utf8")) as {
-      deviceMid: string;
-    };
-    expect(state.deviceMid).toBe(first.ZCODE_TELEMETRY_DEVICE_MID);
+    try {
+      const env = {
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "https://collector.example/v1/traces",
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "https://collector.example/v1/metrics",
+        ZCODE_MODEL_TELEMETRY_ENABLED: "1",
+        ZCODE_HOME: home,
+      };
+      const prepared = await Promise.all([prepareModelTelemetryEnv(env), prepareModelTelemetryEnv(env)]);
+      expect(prepared).toEqual([env, env]);
+      expect(createModelTelemetry().enabled).toBe(false);
+      expect(await readdir(home)).toEqual([]);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });
