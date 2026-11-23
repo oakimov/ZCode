@@ -7,12 +7,13 @@
 
 | 能力                                       | 配置项                                          | 关闭时的行为                                                              |
 | ------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------- |
-| ARMS RUM 上报                              | `ZCODE_ARMS_RUM_ENDPOINT`                       | 主进程与渲染进程的 ARMS SDK 以 `enable: false` 初始化，不产生上报         |
+| ARMS RUM 上报                              | `ZCODE_ARMS_RUM_ENDPOINT`                       | 主进程与渲染进程不启动 ARMS SDK                                           |
 | 事件上报（数仓）                           | `ZCODE_TELEMETRY_REPORT_ENDPOINT`               | 上报入口直接返回，不读取凭据或更新上报状态                                |
-| 自动更新                                   | `ZCODE_AUTO_UPDATE`                             | 不检查、不下载更新                                                        |
+| 自动更新                                   | `ZCODE_AUTO_UPDATE`                             | 不检查、不下载更新，含生产安装包的启动强制升级检查                        |
 | Packaged Agent OTLP                        | `ZCODE_PACKAGED_AGENT_OTEL_*`                   | Desktop 打包永不注入 OTEL 环境                                            |
 | Desktop Renderer Action Trace / Local TTFT | OTLP endpoint、运行时开关和远端配置             | Main 不创建 exporter 或查询 trace rollout；Renderer 的 trace 配置保持关闭 |
 | CLI 模型遥测                               | `ZCODE_MODEL_TELEMETRY_ENABLED` / OTLP endpoint | `prepareModelTelemetryEnv` 永久 no-op                                     |
+| 营销活动上报                               | 无                                              | 不启动营销服务，不查询投放或上报确认/关闭                                 |
 
 ## 配置来源（本 fork）
 
@@ -38,8 +39,8 @@ ARMS / telemetryCore / autoUpdater / packaged Agent OTEL / CLI model telemetry
 均为 no-op
 ```
 
-- 自动更新判定：`ZCODE_PRODUCT_FLAVOR === "production" && ZCODE_AUTO_UPDATE_ENABLED`；
-  后者在本 fork 恒为 `false`。
+- 自动更新和生产安装包的启动强制升级检查均由 `ZCODE_AUTO_UPDATE_ENABLED` 控制，
+  在本 fork 恒为 `false`。
 - Agent OTLP：`resolveBuildPackagedAgentTelemetryEnv` 恒返回 `{}`，release/CI 也不再要求配置。
 
 ## 验收

@@ -20,7 +20,8 @@ async function queryCount() {
   ).length;
 }
 
-describe("任务成功完成刷新营销投放", () => {
+// 公开 fork 关闭这条投放链路；匿名回归验证关闭态。
+describe.skip("任务成功完成刷新营销投放", () => {
   it("MTC-TASK-COMPLETE：真实任务成功完成后立即拉取活动", async function () {
     this.timeout(120_000);
     await fetch(`${origin()}/__e2e/marketing/reset`, {

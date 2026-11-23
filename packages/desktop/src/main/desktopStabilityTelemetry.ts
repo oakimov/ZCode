@@ -4,6 +4,7 @@ import armsRum from "@arms/rum-electron";
 import { BrowserWindow, type WebContents } from "electron";
 import {
   mapZCodeEnvToArmsRumEnv,
+  ZCODE_ARMS_RUM_ENDPOINT,
   type HostAgentProcessErrorResponse,
   type HostAgentProcessExceptionResponse,
   type HostAgentProcessExitedResponse,
@@ -666,6 +667,8 @@ function attachWebContentsStabilityWatch(
 
 export function configureDesktopStabilityTelemetry(context: StabilityGlobalContext): void {
   globalContext = context;
+  // 关闭 ARMS 时 SDK 未初始化；仍配置本地稳定性诊断。
+  if (!ZCODE_ARMS_RUM_ENDPOINT) return;
   armsRum.setConfig("properties", {
     device_mid: context.deviceMid,
     platform: normalizeOsCategory(context.platform),

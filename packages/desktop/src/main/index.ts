@@ -83,6 +83,7 @@ import {
   type appSettingsPatchSchema,
   PlatformChannels,
   DISABLED_RENDERER_ACTION_TRACE_CONFIG,
+  ZCODE_ARMS_RUM_ENDPOINT,
   ZCODE_ENV,
   ZCODE_PRODUCT_FLAVOR,
   ZCODE_AUTO_UPDATE_ENABLED,
@@ -883,7 +884,7 @@ function syncAppTelemetryInteractiveState(): void {
     ),
   );
   // 登出/切号发生在 host 子进程，主进程无即时信号；窗口聚焦时兜底刷新 ARMS user.name
-  void armsUserIdentitySync.refresh();
+  armsUserIdentitySync?.refresh();
 }
 
 app.on("browser-window-focus", (_event, win) => {
@@ -945,10 +946,12 @@ desktopContextPromptRollout = createDesktopContextPromptRollout({
   fetchConfig: electronClientConfigsFetcher,
   logger,
 });
-const armsUserIdentitySync = createArmsUserIdentitySync({
-  deviceMid,
-  setUser: (user) => armsRum.setConfig("user", user),
-});
+const armsUserIdentitySync = ZCODE_ARMS_RUM_ENDPOINT
+  ? createArmsUserIdentitySync({
+      deviceMid,
+      setUser: (user) => armsRum.setConfig("user", user),
+    })
+  : undefined;
 const webRemoteControlAppVersion = ZCODE_VERSION || app.getVersion();
 const defaultZCodeEndpointUrls = buildZCodeEndpointUrls(DEFAULT_ZCODE_ENDPOINT_ORIGIN, {
   appVersion: webRemoteControlAppVersion,
@@ -2587,7 +2590,7 @@ app.whenReady().then(async () => {
     logger,
     appTelemetryRuntime,
     onOAuthCallbackHandledSideEffect: () => {
-      void armsUserIdentitySync.refresh();
+      armsUserIdentitySync?.refresh();
     },
     appTelemetryCore,
     reportRemoteUsageEvent: reportRemoteUsageEventForRenderer,
@@ -2638,7 +2641,7 @@ app.whenReady().then(async () => {
   await armsInitPromise;
 
   // ARMS init 完成后首次写入 user.name（落 device_mid）
-  void armsUserIdentitySync.refresh();
+  armsUserIdentitySync?.refresh();
 
   configureDesktopStabilityTelemetry({
     deviceMid,
@@ -2686,32 +2689,18 @@ app.whenReady().then(async () => {
   });
   registerDesktopNetworkTelemetry(logger);
 
-  // 本地未打包 dev 构建（app.isPackaged === false）必须跳过远端强制升级 gate。
-  // 原因：force-update gate 只看 ZCODE_ENV === "production"，但 dev 构建（如 dev:desktop:cua
-  // 连真实后端测 computer use）虽指向 production 后端，版本号却滞后于线上 release（feature
-  // 分支不 bump 版本），会被 release minimalVersion 误判为"需强制升级"而启动秒退。force-update
-  // 是面向打包发布客户端的安全门，对未打包 dev 运行时无意义。打包版 app.isPackaged === true，
-  // gate 照常生效，对真实用户零影响。
-  const skipForceUpdateForLocalDevRuntime = !app.isPackaged;
-  const forceUpdateGuardResult =
-    ZCODE_PRODUCT_FLAVOR === "production" && !skipForceUpdateForLocalDevRuntime
-      ? await maybeBlockStartupForForceUpdate({
-          resolveZcodeJwtToken: () => autoUpdateCredentialService.load("zcodejwttoken"),
-          locale: currentApplicationLocale,
-          logger,
-          endpointOrigin: await resolveCurrentZCodeEndpointOrigin(),
-          onBlocked: () => {
-            forceUpdateMainWindowCreationBlocked = true;
-          },
-        })
-      : { blocked: false };
-  if (ZCODE_PRODUCT_FLAVOR !== "production") {
-    logger.info("[force-update] Preview 跳过远端强制升级检查");
-  } else if (skipForceUpdateForLocalDevRuntime) {
-    logger.info("[force-update] 本地 dev 构建（未打包）跳过远端强制升级检查");
-  }
-  if (forceUpdateGuardResult.blocked) {
-    return;
+  // 强更原来绕开了构建期开关，生产安装包仍会携带凭据查询最低版本并阻断主窗口。
+  if (ZCODE_PRODUCT_FLAVOR === "production" && ZCODE_AUTO_UPDATE_ENABLED && app.isPackaged) {
+    const result = await maybeBlockStartupForForceUpdate({
+      resolveZcodeJwtToken: () => autoUpdateCredentialService.load("zcodejwttoken"),
+      locale: currentApplicationLocale,
+      logger,
+      endpointOrigin: await resolveCurrentZCodeEndpointOrigin(),
+      onBlocked: () => {
+        forceUpdateMainWindowCreationBlocked = true;
+      },
+    });
+    if (result.blocked) return;
   }
 
   logger.info("[startup] 创建主窗口");

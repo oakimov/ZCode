@@ -90,7 +90,6 @@ import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
 import { useRootProviderSettingsSnapshot } from "@/root/useRootProviderSettingsSnapshot.js";
 import { useWebRemoteControlAuthSync } from "@/web-remote-control/app/useWebRemoteControlAuthSync.js";
 import { useRootOAuthEffects } from "@/root/useRootOAuthEffects.js";
-import { consumeZcodeJwtInvalidRestartMarker } from "@/root/zcodeJwtInvalidRestartMarker.js";
 import { useDesktopNativeThemeSync } from "@/root/useDesktopNativeThemeSync.js";
 import { useRootPlatformEffects } from "@/root/useRootPlatformEffects.js";
 import { useRootWorkspaceActions } from "@/root/useRootWorkspaceActions.js";
@@ -113,7 +112,6 @@ import {
   markCodeCommentRemoved,
 } from "@/lib/codeCommentContext.js";
 import { useCodeCommentPreviewStore } from "@/store/codeCommentPreviewStore.js";
-import { MarketingTouchProvider } from "@/components/marketing-touch/MarketingTouchProvider.js";
 import { setUiPerfArmsReporter } from "@/lib/uiPerfArmsTelemetry.js";
 import { setSessionOpenArmsReporter } from "@/lib/sessionOpenArmsTelemetry.js";
 import { setSendFunnelArmsReporter } from "@/lib/sendFunnelArmsTelemetry.js";
@@ -137,12 +135,7 @@ import type {
 } from "@/app-shell/types.js";
 import { DEFAULT_LUCIDE_STROKE_WIDTH } from "@/components/icons/windowIcons.js";
 
-type WelcomeScreenOpenReason =
-  | "startup-provider-required"
-  | "manual-login"
-  | "provider-request"
-  | "logout-provider-required"
-  | "session-expired";
+type WelcomeScreenOpenReason = "startup-provider-required" | "manual-login" | "provider-request";
 
 /**
  * Root —— 应用根组件
@@ -183,13 +176,12 @@ export function Root(props: RootProps) {
                         <CodingPlanUpgradeDialogProvider>
                           <RewardsProvider desktop={props.isDesktop === true}>
                             <RequestSecurityHost />
-                            <MarketingTouchProvider desktop={props.isDesktop === true}>
-                              <RemoteConnectionProgressProvider>
-                                <DataSyncDialogProvider>
-                                  <RootInner {...props} />
-                                </DataSyncDialogProvider>
-                              </RemoteConnectionProgressProvider>
-                            </MarketingTouchProvider>
+                            {/* 本 fork 关闭营销投放，避免启动查询和服务端弹窗。 */}
+                            <RemoteConnectionProgressProvider>
+                              <DataSyncDialogProvider>
+                                <RootInner {...props} />
+                              </DataSyncDialogProvider>
+                            </RemoteConnectionProgressProvider>
                           </RewardsProvider>
                         </CodingPlanUpgradeDialogProvider>
                       </AssistantCodeCommentFeatureProvider>
@@ -298,9 +290,7 @@ function RootInner({
     codingPlanSubscriptionService: services.codingPlanSubscriptionService,
   });
   const [welcomeScreenOpenReason, setWelcomeScreenOpenReason] =
-    useState<WelcomeScreenOpenReason | null>(() =>
-      consumeZcodeJwtInvalidRestartMarker() ? "session-expired" : null,
-    );
+    useState<WelcomeScreenOpenReason | null>(null);
   const [providerFamilyDomainMigrationComplete, setProviderFamilyDomainMigrationComplete] =
     useState(false);
   const loginEntryRequest = useZCodeStore((state) => state.loginEntryRequest);
@@ -619,9 +609,7 @@ function RootInner({
           if (open) {
             return "startup-provider-required";
           }
-          // JWT 过期提示确认后会先写入 session-expired，随后 provider
-          // 启动门禁以 open=false 收尾。这里若无条件清空，会覆盖重新登录页并回到工作区。
-          // 门禁只能关闭自己拥有的启动登录态，不能清理其它交互来源的 reason。
+          // 门禁只能关闭自己拥有的启动登录态，不能清理手动登录。
           return currentReason === "startup-provider-required" ? null : currentReason;
         });
       },
@@ -694,9 +682,6 @@ function RootInner({
   const handleOpenDirectoryBrowser = useCallback(() => {
     setDirectoryBrowserOpen(true);
   }, []);
-  const handleReauthenticationRequired = useCallback(() => {
-    setWelcomeScreenOpenReason("session-expired");
-  }, []);
   const {
     setWorkspaceActionError,
     startDraftInWorkspace,
@@ -729,9 +714,6 @@ function RootInner({
     updateAppSettings,
     setOAuthError,
     setUser,
-    onProviderFamilyDomainClearedAfterLogout: () => {
-      setWelcomeScreenOpenReason("logout-provider-required");
-    },
     userId: user?.id,
     onOpenRemoteConnection: allowRemoteWorkspace ? handleOpenRemoteConnection : undefined,
     openRemoteProjectWorkspace: openPreparedRemoteProjectWorkspace,
@@ -1095,7 +1077,6 @@ function RootInner({
     oauthPollingActive,
     setOAuthPollingActive,
     markOAuthSuccess,
-    onReauthenticationRequired: handleReauthenticationRequired,
   });
 
   useEffect(

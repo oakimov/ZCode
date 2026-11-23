@@ -1533,7 +1533,8 @@ export function refreshAutoUpdaterReleaseChannel(
   receivePreviewUpdates: boolean,
   reason = "settings receivePreviewUpdates changed",
 ) {
-  if (quitAndInstallState !== "idle") return;
+  // 设置更新会独立触发 manifest 请求，也必须遵守初始化阶段的关闭决定。
+  if (autoUpdaterDisabledForProductFlavor || quitAndInstallState !== "idle") return;
   const nextChannel: ElectronReleaseChannel = receivePreviewUpdates ? "preview" : "stable";
 
   if (!canUseAutoUpdaterInCurrentRuntime()) {

@@ -101,7 +101,6 @@ export function useRootWorkspaceActions({
   updateAppSettings,
   setOAuthError,
   setUser,
-  onProviderFamilyDomainClearedAfterLogout,
   userId,
   onOpenRemoteConnection,
   openRemoteProjectWorkspace,
@@ -124,7 +123,6 @@ export function useRootWorkspaceActions({
   updateAppSettings: (patch: Partial<AppSettings>) => Promise<void>;
   setOAuthError: (error: string | null) => void;
   setUser: (user: UserInfo | null) => void;
-  onProviderFamilyDomainClearedAfterLogout?: () => void;
   userId?: string;
   onOpenRemoteConnection?: (preference?: RemoteConnectionOpenPreference) => void;
   openRemoteProjectWorkspace?: (target: {
@@ -520,9 +518,7 @@ export function useRootWorkspaceActions({
       providerFamilyDomainUpdatedAt: Date.now(),
       providerFamilyDomainMigrated: true,
     });
-    if (!nextProviderFamilyDomain) {
-      onProviderFamilyDomainClearedAfterLogout?.();
-    }
+    // 退出登录后保留工作区；重新登录由用户主动发起。
     // ZAI/BigModel provider 已恢复为 App 登录镜像。
     // 派生 Coding/Start key 由 OAuth logout 的 host hook 统一清理，Root 只负责刷新展示态。
     setOAuthError(null);
@@ -536,10 +532,8 @@ export function useRootWorkspaceActions({
     intl,
     requestConfirmation,
     refreshProviderState,
-    onProviderFamilyDomainClearedAfterLogout,
     platform,
     services.oauthService,
-    services.modelSelectionService,
     services.settingService,
     setOAuthError,
     setUser,

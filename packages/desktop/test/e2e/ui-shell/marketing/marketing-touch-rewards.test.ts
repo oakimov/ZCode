@@ -90,7 +90,8 @@ async function assertAppReportHeaders(authenticated: boolean) {
 }
 
 describe("Rewards website embedded integration", () => {
-  it("REF-11: Banner 和独立弹窗 navigate rewards 打开邀请页并各上报一次", async () => {
+  // 公开 fork 关闭营销入口，保留用户主动打开 Rewards 的覆盖。
+  it.skip("REF-11: Banner 和独立弹窗 navigate rewards 打开邀请页并各上报一次", async () => {
     const origin = process.env.ZCODE_CODING_PLAN_UPGRADE_MOCK_BASE_URL;
     if (!origin) throw new Error("Missing isolated App fixture");
     const assets = (await (await fetch(`${origin}/__e2e/marketing/assets`)).json()) as Record<
@@ -355,7 +356,8 @@ describe("Rewards website embedded integration", () => {
       .click();
     await $('[data-testid="rewards-surface"]').waitForExist({ reverse: true });
   });
-  it("REF-12: 匿名营销导航打开登录，取消后不打开邀请页并保留 confirm 上报", async () => {
+  // 公开 fork 关闭营销入口，保留用户主动打开 Rewards 的覆盖。
+  it.skip("REF-12: 匿名营销导航打开登录，取消后不打开邀请页并保留 confirm 上报", async () => {
     const origin = process.env.ZCODE_CODING_PLAN_UPGRADE_MOCK_BASE_URL;
     if (!origin) throw new Error("Missing isolated App fixture");
     const byId = (id: string) => $(`[data-testid="${id}"]`);

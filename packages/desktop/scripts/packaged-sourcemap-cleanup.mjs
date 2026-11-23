@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -110,8 +111,14 @@ export function assertStagingPackageJson(stagingDir) {
 export function assertAsarPackageJson(appAsarPath) {
   // 不要用 asar CLI extract-file：它会把文件写到 cwd，曾经误覆盖仓库根 package.json。
   const asar = require("@electron/asar");
-  const source = asar.extractFile(appAsarPath, "package.json").toString("utf8");
-  return assertValidPackageJsonSource(source, `${appAsarPath}:package.json`);
+  // 两次重打包使用同一个路径；旧缓存里的文件大小和偏移不能用于新归档。
+  asar.uncache(appAsarPath);
+  try {
+    const source = asar.extractFile(appAsarPath, "package.json").toString("utf8");
+    return assertValidPackageJsonSource(source, `${appAsarPath}:package.json`);
+  } finally {
+    asar.uncache(appAsarPath);
+  }
 }
 
 export function refreshElectronAsarIntegrity(resourcesDir, appAsarPath, logger = console) {
@@ -120,17 +127,19 @@ export function refreshElectronAsarIntegrity(resourcesDir, appAsarPath, logger =
     return false;
   }
 
-  const hash = createHash("sha256").update(readFileSync(appAsarPath)).digest("hex");
-  const integrity = {
-    "Resources/app.asar": {
-      algorithm: "SHA256",
-      hash,
-    },
-  };
-
-  // plutil 比手写二进制 plist 更稳；afterPack 改写 asar 后必须同步 ElectronAsarIntegrity，
-  // 否则 macOS 包装态会在 JS 启动前因完整性校验失败而静默退出。
-  const { execFileSync } = require("node:child_process");
+  // Electron 校验 ASAR 的原始 header 字符串；只更新改写过的 app.asar。
+  const { getRawHeader } = require("@electron/asar");
+  const hash = createHash("sha256").update(getRawHeader(appAsarPath).headerString).digest("hex");
+  const integrity = JSON.parse(
+    execFileSync(
+      "plutil",
+      ["-extract", "ElectronAsarIntegrity", "json", "-o", "-", infoPlistPath],
+      {
+        encoding: "utf8",
+      },
+    ),
+  );
+  integrity["Resources/app.asar"] = { algorithm: "SHA256", hash };
   execFileSync(
     "plutil",
     ["-replace", "ElectronAsarIntegrity", "-json", JSON.stringify(integrity), infoPlistPath],

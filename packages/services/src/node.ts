@@ -90,8 +90,6 @@ import { randomUUID } from "node:crypto";
 import { getAppConfigDir as getContentAppConfigDir } from "#src/paths.js";
 import { ICloudContentService } from "#src/cloud-content/cloudContent.js";
 import { createCloudContentService } from "#src/cloud-content/cloudContentService.js";
-import { IMarketingTouchService } from "#src/marketing-touch/marketingTouch.js";
-import { createMarketingTouchService } from "#src/marketing-touch/marketingTouchService.js";
 import { IVoiceInputService } from "#src/voice-input/contract.js";
 import { createVoiceInputService } from "#src/voice-input/voiceInputService.js";
 import { createMarketingAssetRegistry } from "#src/marketing-touch/marketingAssetRegistry.js";
@@ -2959,18 +2957,8 @@ export function createLocalServices(options: {
   const marketingAssets = createMarketingAssetRegistry({
     allowLoopback: ZCODE_ENV === "test" || process.env.NODE_ENV === "development",
   });
+  // 公开 fork 不提供营销投放 RPC，避免 Host 发出查询或交互上报。
   const services = new ServiceCollection()
-    .register(
-      IMarketingTouchService,
-      createMarketingTouchService({
-        apiClient,
-        getToken: () => credentialService.load("zcodejwttoken"),
-        getDeviceMid: () => options?.agentTelemetry?.getDeviceMid?.(),
-        baseUrl: buildRuntimeZCodeApiUrl(process.env, "/"),
-        appVersion: ZCODE_VERSION,
-        onSnapshot: (snapshot) => marketingAssets.accept(snapshot),
-      }),
-    )
     .register(
       IVoiceInputService,
       createVoiceInputService({

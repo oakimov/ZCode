@@ -106,7 +106,8 @@ async function deliverHero(hero: unknown) {
   return result.campaignId;
 }
 
-describe("Marketing Touch delivery", () => {
+// 公开 fork 关闭这条投放链路；匿名回归验证关闭态。
+describe.skip("Marketing Touch delivery", () => {
   before(async () => {
     // 冷启动可以恢复到未选项目草稿；全局营销界面只依赖应用壳，不能把固定 cwd 当就绪条件。
     await waitForTestIdByDom(TID_TASK_SETTINGS_BUTTON, { timeout: 30_000 });

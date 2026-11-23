@@ -10,6 +10,7 @@ import {
   type ProcessResourceRole,
   type ProcessResourceRuntimeSurface,
   PROCESS_RESOURCE_EVENT_NAMES,
+  ZCODE_ARMS_RUM_ENDPOINT,
   zcodeToolExecResourceSchema,
 } from "@zcode/shared";
 import { BrowserWindow } from "electron";
@@ -421,6 +422,8 @@ export function configureDesktopResourceTelemetry(context: ResourceGlobalContext
   globalContext = context;
   desktopHardware = resolveDesktopHardware(context.platform);
 
+  // 关闭 ARMS 时 SDK 未初始化；仍保留本地资源诊断配置。
+  if (!ZCODE_ARMS_RUM_ENDPOINT) return;
   armsRum.setConfig("properties", {
     device_mid: context.deviceMid,
     platform: normalizeOsCategory(context.platform),

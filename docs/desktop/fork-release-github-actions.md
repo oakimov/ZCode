@@ -30,6 +30,9 @@ GitHub Releases。本 fork 的遥测 / ARMS / OTEL / 自动更新永久硬关闭
 
 构建任务使用只读仓库权限，发布任务单独持有写权限。针对同一 tag 的发布任务串行运行。
 
+macOS 打包在改写 `app.asar` 后验证包内 `package.json`，并用当前 ASAR 原始 header 的
+SHA-256 更新 `Info.plist` 中该 archive 的完整性记录。
+
 ## 本地预检
 
 ```bash
