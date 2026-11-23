@@ -3,6 +3,7 @@ import { ConfigOverlay, type ConfigValidationIssue } from "../config-overlay.js"
 import type { z } from "zod";
 import {
   completeApiKeyAccessDataSchema,
+  completeNoneAccessDataSchema,
   completeZhipuAccountAccessDataSchema,
   completeProviderApiDataSchema,
   completeProviderConfigDataSchema,
@@ -12,12 +13,23 @@ import {
   type providerVisibilityDataSchema,
   type providerLogoDataSchema,
   type apiKeyAccessDataSchema,
+  type noneAccessDataSchema,
   type zhipuAccountAccessDataSchema,
   type providerAccessDataSchema,
   type providerApiDataSchema,
   type providerConfigDataSchema,
   type providerTemplateNameMapDataSchema,
   type providerTemplateDataSchema,
+} from "./provider-data-schema.js";
+
+export {
+  isAbsoluteModulePathOrFileUrl,
+  completeProviderApiDataSchema,
+  completeProviderAccessDataSchema,
+  completeNoneAccessDataSchema,
+  noneAccessDataSchema,
+  providerApiTypeDataSchema,
+  providerHttpApiTypeDataSchema,
 } from "./provider-data-schema.js";
 import { validateConfigSchema } from "./schema-validation.js";
 import type { ModelId, ProviderId, ProviderTemplateId } from "./ids.js";
@@ -111,7 +123,30 @@ export class ZhipuAccountAccessConfig extends ConfigOverlay<ZhipuAccountAccessCo
   }
 }
 
-export type ProviderAccessConfig = ApiKeyAccessConfig | ZhipuAccountAccessConfig;
+export type NoneAccessConfigObject = Readonly<z.infer<typeof noneAccessDataSchema>>;
+
+export class NoneAccessConfig extends ConfigOverlay<NoneAccessConfig> {
+  readonly type = "none" as const;
+
+  constructor() {
+    super();
+    Object.freeze(this);
+  }
+
+  overlay(_next: NoneAccessConfig): NoneAccessConfig {
+    return this;
+  }
+
+  validateComplete(path: readonly string[] = []): readonly ConfigValidationIssue[] {
+    return validateConfigSchema(completeNoneAccessDataSchema, this.toJSON(), path);
+  }
+
+  toJSON(): NoneAccessConfigObject {
+    return { type: this.type };
+  }
+}
+
+export type ProviderAccessConfig = ApiKeyAccessConfig | ZhipuAccountAccessConfig | NoneAccessConfig;
 
 export type ProviderAccessConfigObject = Readonly<z.infer<typeof providerAccessDataSchema>>;
 
@@ -120,6 +155,16 @@ export function isApiKeyAccess<T extends { readonly type: string }>(
   access: T | null | undefined,
 ): access is Extract<T, { readonly type: ApiKeyAccessConfigObject["type"] }> {
   return access?.type === "api-key" || access?.type === "zhipu-coding-plan-api-key";
+}
+
+export function isNoneAccess<T extends { readonly type: string }>(
+  access: T | null | undefined,
+): access is Extract<T, { readonly type: "none" }> {
+  return access?.type === "none";
+}
+
+export function isAiSdkModuleApiType(type: string | null | undefined): type is "ai-sdk-module" {
+  return type === "ai-sdk-module";
 }
 
 export type ProviderVisibility = z.infer<typeof providerVisibilityDataSchema>;
@@ -132,12 +177,18 @@ export class ProviderApiConfig extends ConfigOverlay<ProviderApiConfig> {
   readonly type?: ProviderApiConfigInput["type"];
   readonly baseUrl?: ProviderApiConfigInput["baseUrl"];
   readonly headers?: ProviderApiConfigInput["headers"];
+  readonly module?: ProviderApiConfigInput["module"];
+  readonly export?: ProviderApiConfigInput["export"];
+  readonly options?: ProviderApiConfigInput["options"];
 
   constructor(input: ProviderApiConfigInput = {}) {
     super();
     this.type = input.type;
     this.baseUrl = input.baseUrl;
     this.headers = input.headers ? Object.freeze({ ...input.headers }) : input.headers;
+    this.module = input.module;
+    this.export = input.export;
+    this.options = input.options ? Object.freeze({ ...input.options }) : input.options;
     Object.freeze(this);
   }
 
@@ -146,6 +197,9 @@ export class ProviderApiConfig extends ConfigOverlay<ProviderApiConfig> {
       type: this.overlayValue(this.type, next.type),
       baseUrl: this.overlayValue(this.baseUrl, next.baseUrl),
       headers: this.overlayValue(this.headers, next.headers),
+      module: this.overlayValue(this.module, next.module),
+      export: this.overlayValue(this.export, next.export),
+      options: this.overlayValue(this.options, next.options),
     });
   }
 
@@ -159,6 +213,9 @@ export class ProviderApiConfig extends ConfigOverlay<ProviderApiConfig> {
       type: this.type,
       baseUrl: this.baseUrl,
       headers: this.headers,
+      module: this.module,
+      export: this.export,
+      options: this.options,
     });
   }
 }
@@ -505,6 +562,8 @@ function overlayProviderAccess(
       return current.overlay(next as ApiKeyAccessConfig);
     case "zhipu-account":
       return current.overlay(next as ZhipuAccountAccessConfig);
+    case "none":
+      return current.overlay(next as NoneAccessConfig);
   }
 }
 

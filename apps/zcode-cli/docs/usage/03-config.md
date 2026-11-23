@@ -52,7 +52,12 @@
 }
 ```
 
-支持的 API 类型为 `openai-chat-completions`、`openai-responses`、`anthropic-messages`。服务必须支持所选协议及任务需要的工具调用。模型能力、推理选项和输出限制还受模型规则约束；不要仅改一个模型名称就假设所有选项兼容。
+HTTP API 类型为 `openai-chat-completions`、`openai-responses`、`anthropic-messages`。服务必须支持所选协议及任务需要的工具调用。模型能力、推理选项和输出限制还受模型规则约束。
+
+受信任的本地 AI SDK V3 模块可配置 `access: { "type": "none" }` 和
+`api: { "type": "ai-sdk-module", "module": "/absolute/path/to/provider.mjs" }`。默认导出名为
+`createProvider`，可通过 `api.export` 自定义；工厂的选项由 `api.options` 提供。模块在 Worker
+内以当前用户权限执行，配置前确认入口与依赖可信。入口文件变更后重启 Worker。
 
 自定义 API Key 可以由启动器从受控凭据来源写入临时配置。该文件含明文 Key，应限制文件权限，不提交到 Git，不放入评测结果归档。配置读取不承诺对 `apiKey` 字符串做 `${ENV}` 替换。
 

@@ -3,6 +3,7 @@ import type { z } from "zod";
 import type { completeModelConfigDataSchema } from "@zcode/shared/model-config";
 import type {
   completeApiKeyAccessDataSchema,
+  completeNoneAccessDataSchema,
   completeZhipuAccountAccessDataSchema,
   completeProviderConfigDataSchema,
 } from "./config/provider-data-schema.js";
@@ -11,6 +12,7 @@ import {
   type ApiKeyAccessConfig,
   ModelConfig,
   ModelConfigRules,
+  type NoneAccessConfig,
   type ZhipuAccountAccessConfig,
   type ModelId,
   ProviderConfig,
@@ -25,9 +27,13 @@ import type { AccountProviderStates } from "./account-provider-state.js";
 export type RegistryZhipuAccountAccessConfig = ZhipuAccountAccessConfig &
   z.infer<typeof completeZhipuAccountAccessDataSchema>;
 
+export type RegistryNoneAccessConfig = NoneAccessConfig &
+  z.infer<typeof completeNoneAccessDataSchema>;
+
 export type RegistryProviderAccessConfig =
   | (ApiKeyAccessConfig & z.infer<typeof completeApiKeyAccessDataSchema>)
-  | RegistryZhipuAccountAccessConfig;
+  | RegistryZhipuAccountAccessConfig
+  | RegistryNoneAccessConfig;
 
 export type RegistryProviderConfig = ProviderConfig &
   z.infer<typeof completeProviderConfigDataSchema> & {
@@ -36,32 +42,55 @@ export type RegistryProviderConfig = ProviderConfig &
 
 export type RegistryProviderConfigObject = z.infer<typeof completeProviderConfigDataSchema>;
 
+function serializeRegistryProviderAccess(
+  access: RegistryProviderAccessConfig,
+): RegistryProviderConfigObject["access"] {
+  if (access.type === "zhipu-account") {
+    return {
+      type: access.type,
+      accountType: access.accountType,
+      mode: access.mode,
+      entitled: access.entitled,
+    };
+  }
+  if (access.type === "none") {
+    return { type: access.type };
+  }
+  return {
+    type: access.type,
+    apiKey: access.apiKey,
+    ...(access.apiKeyManagementUrl === undefined
+      ? {}
+      : { apiKeyManagementUrl: access.apiKeyManagementUrl }),
+  };
+}
+
+function serializeRegistryProviderApi(
+  api: RegistryProviderConfig["api"],
+): RegistryProviderConfigObject["api"] {
+  if (api.type === "ai-sdk-module") {
+    return {
+      type: api.type,
+      module: api.module,
+      ...(api.export == null ? {} : { export: api.export }),
+      ...(api.options == null ? {} : { options: api.options }),
+    };
+  }
+  return {
+    type: api.type,
+    baseUrl: api.baseUrl,
+    ...(api.headers == null ? {} : { headers: api.headers }),
+  };
+}
+
 export function serializeRegistryProviderConfig(
   config: RegistryProviderConfig,
 ): RegistryProviderConfigObject {
   return {
     group: config.group,
     ...(config.logo === undefined ? {} : { logo: config.logo }),
-    access:
-      config.access.type !== "zhipu-account"
-        ? {
-            type: config.access.type,
-            apiKey: config.access.apiKey,
-            ...(config.access.apiKeyManagementUrl === undefined
-              ? {}
-              : { apiKeyManagementUrl: config.access.apiKeyManagementUrl }),
-          }
-        : {
-            type: config.access.type,
-            accountType: config.access.accountType,
-            mode: config.access.mode,
-            entitled: config.access.entitled,
-          },
-    api: {
-      type: config.api.type,
-      baseUrl: config.api.baseUrl,
-      ...(config.api.headers == null ? {} : { headers: config.api.headers }),
-    },
+    access: serializeRegistryProviderAccess(config.access),
+    api: serializeRegistryProviderApi(config.api),
     ...(config.builtinModelIds == null ? {} : { builtinModelIds: [...config.builtinModelIds] }),
     ...(config.personalModelIds == null ? {} : { personalModelIds: [...config.personalModelIds] }),
     ...(config.modelOrder == null ? {} : { modelOrder: [...config.modelOrder] }),

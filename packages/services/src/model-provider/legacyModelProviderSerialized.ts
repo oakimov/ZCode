@@ -38,7 +38,8 @@ export type ModelProviderSupportedFormat = "anthropic" | "openai" | "responses" 
 export type ModelProviderApiFormat =
   | "anthropic-messages"
   | "openai-chat-completions"
-  | "openai-responses";
+  | "openai-responses"
+  | "ai-sdk-module";
 
 export type ModelProviderCatalogSourceId = "china-llm-zcode-dev";
 
@@ -172,6 +173,7 @@ export const modelProviderApiFormatSchema = z.enum([
   "anthropic-messages",
   "openai-chat-completions",
   "openai-responses",
+  "ai-sdk-module",
 ]);
 
 export const modelProviderKindSchema = z.enum(["anthropic", "openai", "openai-compatible"]);
@@ -474,6 +476,9 @@ export function resolveModelProviderDefaultKind(
       return "openai";
     case "openai-chat-completions":
       return "openai-compatible";
+    case "ai-sdk-module":
+      // 旧 store 无 module kind；仅满足穷尽分支，不用于真实装配。
+      return "openai-compatible";
   }
 }
 
@@ -497,6 +502,8 @@ export function mapModelProviderApiFormatToKind(
     case "openai-responses":
       return "openai";
     case "openai-chat-completions":
+      return "openai-compatible";
+    case "ai-sdk-module":
       return "openai-compatible";
   }
 }
@@ -690,6 +697,8 @@ function resolveLegacyModelProviderDefaultKind(
       return "openai";
     case "openai-chat-completions":
       return "openai-compatible";
+    case "ai-sdk-module":
+      return "openai-compatible";
     case undefined:
       break;
   }
@@ -822,6 +831,8 @@ export function getDefaultModelSupportedFormatsFromApiFormat(
       return ["responses"];
     case "openai-chat-completions":
       return ["openai"];
+    case "ai-sdk-module":
+      return ["openai"];
   }
 }
 
@@ -832,7 +843,8 @@ export function resolveModelProviderApiFormat(
   if (
     provider.apiFormat === "anthropic-messages" ||
     provider.apiFormat === "openai-chat-completions" ||
-    provider.apiFormat === "openai-responses"
+    provider.apiFormat === "openai-responses" ||
+    provider.apiFormat === "ai-sdk-module"
   ) {
     return provider.apiFormat;
   }

@@ -2357,3 +2357,22 @@ exceptions:
     paths:
       - packages/ui/src/root/GlobalDatabaseStartupLoading.tsx
     reason: 启动失败页在现有复制诊断/重试/退出旁增加导出日志按钮（docs/desktop/database-migration-startup-gate-plan.md）。只扩展既有失败页交互，不新增文件、不改变启动状态 owner 或模块边界；接管 packages/ui/src/root 不在本次范围内。
+  - id: ai-sdk-module-provider-loader
+    rule: unmanaged-new-file
+    paths:
+      - apps/zcode-cli/packages/adapters/src/model/module-provider-loader.ts
+      - apps/zcode-cli/packages/adapters/src/model/model-execution-module.ts
+    reason: >-
+      Personal api.type ai-sdk-module 的 Worker 内 ESM loader 与 LanguageModelV3
+      包装（apps/zcode-cli/docs/design/v2/model/ai-sdk-module-provider.md）；新逻辑落在独立文件，经
+      model-execution 的 module kind 分发，不改变 adapters/model 的 HTTP 路径 owner；接管整个
+      adapters 包不在本次范围内。
+  - id: ai-sdk-module-provider-schema-existing-edit
+    rule: unmanaged-new-file
+    paths:
+      - packages/provider/src/config/provider-data-schema.ts
+      - packages/services/src/model-provider/legacyModelProviderSerialized.ts
+    reason: >-
+      已准入的 Provider API/Access schema 与 legacy 序列化仅追加 ai-sdk-module / access.none
+      判别分支与读写映射（docs/working-memory/provider-refactor/design/registry/configuration.md）；HTTP
+      三协议与账号 access 不变，接管 provider/services 未受管目录不在本次范围内。

@@ -212,6 +212,8 @@ function maxOutputTokensMap(apiType: RegistryProviderConfig["api"]["type"]): str
       return '{"max_completion_tokens": maxOutputTokens}';
     case "openai-responses":
       return '{"max_output_tokens": maxOutputTokens}';
+    case "ai-sdk-module":
+      return '{"maxOutputTokens": maxOutputTokens}';
   }
 }
 

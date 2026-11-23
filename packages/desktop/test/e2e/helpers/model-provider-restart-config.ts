@@ -161,5 +161,7 @@ function maxOutputTokensMap(apiFormat: ProviderApiType): string {
       return '{"max_completion_tokens":maxOutputTokens}';
     case "openai-responses":
       return '{"max_output_tokens":maxOutputTokens}';
+    case "ai-sdk-module":
+      return '{"maxOutputTokens":maxOutputTokens}';
   }
 }

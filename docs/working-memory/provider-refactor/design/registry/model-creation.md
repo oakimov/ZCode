@@ -94,11 +94,15 @@ RegistryProviderConfig + RegistryModelConfig
           v
 Adapter private execution closure
 ├─ SDK kind / factory
-├─ baseURL / static headers
-├─ api static credential
-├─ signing / network infrastructure
+├─ baseURL / static headers          (HTTP kinds)
+├─ module path / export / options    (ai-sdk-module)
+├─ api static credential             (api-key / account; none for modules)
+├─ signing / network infrastructure  (HTTP kinds only)
 └─ model factory cache
 ```
+
+`ai-sdk-module` 跳过 HTTP transport / request-security / option-map-fetch 链；模块在 Worker 内
+`import()`，`LanguageModelV3.doStream` / `doGenerate` 直接进入现有 runner。不启动独立 daemon。
 
 私有执行闭包没有独立 Source，不参与 Config Overlay、模型选择、Visibility 或 Model Properties 解析。
 Adapter 只持有进程级网络、签名、路由、重试等执行基础设施；它不持有 Provider 列表，也不存在可供业务
@@ -155,6 +159,27 @@ Provider 顶层不存在 `enabled`；账号套餐资格通过 `zhipu-account.ent
 非空 `builtinModelIds` 约束成员；Individual/Team 继承 Built-in 成员。任何这类
 Account Overlay 必须与产生它的 ZCode Built-in revision 匹配后，才允许 Registry 创建后续 Model。
 
+### none（ai-sdk-module）
+
+```text
+Personal Provider Config
+└─ access.type = none
+└─ api.type = ai-sdk-module
+   └─ module / export / options
+        |
+        v
+ModelFactory / Adapter (kind = module)
+        |
+        v
+ModuleProviderLoader.import → ProviderV3.languageModel(modelId)
+        |
+        v
+LanguageModelV3.doStream / doGenerate
+```
+
+无静态 Key。`options` 可含密钥，按 `access.apiKey` 同等红act。Worker 运行期间模块文件 hash 变化时，
+对该 Provider 返回 typed `module-changed-restart-required`，不二次加载。
+
 ### Off-Peak 请求期材料
 
 ```text
@@ -177,6 +202,23 @@ ModelRequestDependencies.requestAuth.resolve()
 
 Off-Peak 不保存 Secret。它的动态材料由本次闲时执行在 Model 创建时装配，而普通
 `zhipu-account` Mode 由 Account Request Auth Service 在调用时解析。
+
+### none（ai-sdk-module）
+
+```text
+Personal Provider Config
+└─ access.type = none
+└─ api.type = ai-sdk-module
+   └─ module / export / options
+        |
+        v
+ModelFactory / Adapter (kind module)
+        |
+        v
+ModuleProviderLoader.import → createProvider(options).languageModel(modelId)
+```
+
+无静态 Key。模块对鉴权与网络全权负责；ZCode 不附加 Header、不启动独立 daemon。
 
 Request Auth 是执行作用域内、按 request attempt 读取的依赖：
 

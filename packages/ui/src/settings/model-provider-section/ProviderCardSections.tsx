@@ -206,7 +206,9 @@ export function ProviderConnectionSection({
 }) {
   const { intl } = useZCodeIntl();
   const showApiFormat = shouldShowProviderApiFormat(provider);
+  const isModuleProvider = provider.config.api?.type === "ai-sdk-module";
   const readOnlyBaseUrl = provider.config.api?.baseUrl ?? "";
+  const readOnlyModulePath = provider.config.api?.module ?? "";
   const resolvedApiFormat = provider.config.api?.type ?? "anthropic-messages";
 
   const renderReadOnlyField = (label: string, value: string) => (
@@ -228,14 +230,20 @@ export function ProviderConnectionSection({
     </div>
   );
 
-  if (readOnly) {
+  // ai-sdk-module：只读展示路径与协议标签，不提供 Base URL / API 格式编辑。
+  if (isModuleProvider || readOnly) {
     return (
       <>
-        {renderReadOnlyField(
-          intl.formatMessage({ id: "settings.modelProvider.baseUrl" }),
-          readOnlyBaseUrl,
-        )}
-        {showApiFormat
+        {isModuleProvider
+          ? renderReadOnlyField(
+              intl.formatMessage({ id: "settings.modelProvider.modulePath" }),
+              readOnlyModulePath,
+            )
+          : renderReadOnlyField(
+              intl.formatMessage({ id: "settings.modelProvider.baseUrl" }),
+              readOnlyBaseUrl,
+            )}
+        {showApiFormat || isModuleProvider
           ? renderReadOnlyField(
               intl.formatMessage({ id: "settings.modelProvider.apiFormat" }),
               resolveProviderConnectionApiFormatDisplayLabel(intl, resolvedApiFormat),
@@ -272,7 +280,10 @@ export function ProviderConnectionSection({
           <label className="mb-1 block text-ui-base text-foreground-subtle">
             {intl.formatMessage({ id: "settings.modelProvider.apiFormat" })}
           </label>
-          <ProviderApiFormatSelect value={apiFormat} onChange={onApiFormatChange} />
+          <ProviderApiFormatSelect
+            value={apiFormat === "ai-sdk-module" ? "anthropic-messages" : apiFormat}
+            onChange={onApiFormatChange}
+          />
         </div>
       ) : null}
     </>

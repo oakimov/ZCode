@@ -4231,6 +4231,8 @@ const ruRU: Record<string, string> = {
   "settings.modelProvider.apiFormat.title.chatCompletions": "Chat completions",
   "settings.modelProvider.apiFormat.title.responses": "Responses",
   "settings.modelProvider.apiFormat.title.anthropicMessages": "Anthropic messages",
+  "settings.modelProvider.apiFormat.title.aiSdkModule": "Внешний модуль",
+  "settings.modelProvider.modulePath": "Путь к модулю",
   "settings.modelProvider.anthropicEndpoint": "Endpoint Anthropic",
   "settings.modelProvider.anthropicEndpointPlaceholder": "например, https://api.anthropic.com",
   "settings.modelProvider.openaiEndpoint": "Endpoint OpenAI",
