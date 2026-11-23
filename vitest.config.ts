@@ -4,9 +4,9 @@ import { configDefaults, defineConfig } from "vitest/config";
 import engineeringTestFiles from "./scripts/engineering-test-files.json";
 
 export default defineConfig({
-  // 测试固定注入事件上报端点，使遥测上报链路在单测中可验证；真实构建由 scripts/build-time-config.mjs 决定。
+  // 本公开 fork 永久硬关闭遥测；测试 define 也保持空端点，避免工程测试误开上报。
   define: {
-    __ZCODE_TELEMETRY_REPORT_ENDPOINT__: JSON.stringify("https://zcode.z.ai/api/v1/event/report"),
+    __ZCODE_TELEMETRY_REPORT_ENDPOINT__: JSON.stringify(""),
   },
   resolve: {
     alias: {

@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- 网络指标采集/聚合/ARMS 上报 */
 import armsRum from "@arms/rum-electron";
-import { mapZCodeEnvToArmsRumEnv } from "@zcode/shared";
+import { mapZCodeEnvToArmsRumEnv, ZCODE_ARMS_RUM_ENDPOINT } from "@zcode/shared";
 import type { NetworkObservation } from "@zcode/rpc";
 import {
   flushInterfaceNetworkStats,
@@ -182,6 +182,8 @@ function classifyWsError(error: unknown): string {
 
 export function configureDesktopNetworkTelemetry(context: NetworkGlobalContext): void {
   globalContext = context;
+  // 关闭 ARMS 时 SDK 未初始化；仍保留本地网络诊断配置。
+  if (!ZCODE_ARMS_RUM_ENDPOINT) return;
   armsRum.setConfig("properties", {
     device_mid: context.deviceMid,
     platform: normalizeOsCategory(context.platform),

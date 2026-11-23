@@ -1,0 +1,213 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v3.18.2-fork.1). Defaults to the triggering tag or desktop-<commit SHA>."
+        required: false
+        type: string
+      os:
+        description: "Target OS for a single-platform build"
+        required: false
+        default: "mac"
+        type: choice
+        options:
+          - mac
+          - win
+          - linux
+          - all
+
+permissions:
+  contents: read
+
+env:
+  # 本公开 fork：遥测 / ARMS / OTEL / 自动更新永久硬关闭；CI 显式清空，避免 runner 环境泄漏。
+  ZCODE_ARMS_RUM_ENDPOINT: ""
+  ZCODE_TELEMETRY_REPORT_ENDPOINT: ""
+  ZCODE_AUTO_UPDATE: ""
+  ZCODE_PACKAGED_AGENT_OTEL_ENDPOINT: ""
+  ZCODE_PACKAGED_AGENT_OTEL_HEADERS: ""
+  ZCODE_PACKAGED_AGENT_OTEL_SERVICE_NAME: ""
+  ZCODE_MODEL_TELEMETRY_ENABLED: "0"
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ""
+  OTEL_EXPORTER_OTLP_TRACES_HEADERS: ""
+  OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: ""
+  OTEL_EXPORTER_OTLP_METRICS_HEADERS: ""
+  OTEL_EXPORTER_OTLP_HEADERS: ""
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  ZCODE_ENABLE_MAC_SIGN: "0"
+  HUSKY: "0"
+
+jobs:
+  guard-telemetry:
+    name: Telemetry hard-disabled guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.14.0"
+      - name: Assert telemetry stays hard-disabled
+        run: node scripts/assert-telemetry-hard-disabled.mjs
+
+  build-desktop:
+    name: Build ${{ matrix.label }}
+    needs: guard-telemetry
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: mac-arm64
+            runner: macos-14
+            os: mac
+            arch: arm64
+            artifact_glob: |
+              packages/desktop/dist/*.dmg
+              packages/desktop/dist/*.zip
+          - label: win-x64
+            runner: windows-latest
+            os: win
+            arch: x64
+            artifact_glob: packages/desktop/dist/*.exe
+          - label: linux-x64
+            runner: ubuntu-latest
+            os: linux
+            arch: x64
+            artifact_glob: |
+              packages/desktop/dist/*.AppImage
+              packages/desktop/dist/*.deb
+              packages/desktop/dist/*.rpm
+              packages/desktop/dist/*.pkg.tar.zst
+    steps:
+      - name: Decide whether this matrix cell runs
+        id: gate
+        shell: bash
+        env:
+          REQUESTED_OS: ${{ github.event_name == 'workflow_dispatch' && inputs.os || 'all' }}
+          MATRIX_OS: ${{ matrix.os }}
+        run: |
+          if [[ "$REQUESTED_OS" == "all" || "$REQUESTED_OS" == "$MATRIX_OS" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        if: steps.gate.outputs.run == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: "24.14.0"
+          cache: pnpm
+
+      - name: Assert telemetry stays hard-disabled
+        if: steps.gate.outputs.run == 'true'
+        shell: bash
+        run: node scripts/assert-telemetry-hard-disabled.mjs
+
+      - name: Bootstrap workspace
+        if: steps.gate.outputs.run == 'true'
+        shell: bash
+        run: pnpm bootstrap
+
+      - name: Install Linux packaging tools
+        if: steps.gate.outputs.run == 'true' && matrix.os == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools rpm
+
+      - name: Bundle desktop installer
+        if: steps.gate.outputs.run == 'true'
+        shell: bash
+        run: pnpm bundle:desktop -- --os ${{ matrix.os }} --arch ${{ matrix.arch }}
+
+      - name: Re-assert telemetry stayed hard-disabled after build
+        if: steps.gate.outputs.run == 'true'
+        shell: bash
+        run: node scripts/assert-telemetry-hard-disabled.mjs
+
+      - name: Upload build artifacts
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.label }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build-desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: desktop-release-${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || format('desktop-{0}', github.sha) }}
+      queue: max
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          if [[ -n "$REQUESTED_TAG" ]]; then
+            tag="$REQUESTED_TAG"
+          elif [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag="desktop-$GITHUB_SHA"
+          fi
+          # Release action 会剥离 refs/tags/ 前缀，所以这里只接受合法的裸 tag 名。
+          if [[ "$tag" == refs/tags/* ]] || ! git check-ref-format "refs/tags/$tag"; then
+            echo "::error::Invalid release tag"
+            exit 1
+          fi
+          printf 'name=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Download all desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: desktop-*
+          merge-multiple: true
+
+      - name: Verify release tag matches build commit
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          # target_commitish 只对新 tag 生效。已有 tag 必须对比 commit（附注 tag 要解引用）。
+          ref="refs/tags/$RELEASE_TAG"
+          refs="$(git ls-remote origin "$ref" "$ref^{}")"
+          commit="$(awk -v ref="$ref" '$2 == ref { direct = $1 } $2 == ref "^{}" { peeled = $1 } END { print peeled ? peeled : direct }' <<< "$refs")"
+          if [[ -n "$commit" && "$commit" != "$GITHUB_SHA" ]]; then
+            echo "::error::Release tag points to a different commit"
+            exit 1
+          fi
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          target_commitish: ${{ github.sha }}
+          name: ZCode Desktop ${{ steps.tag.outputs.name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.name, '-') }}
+          files: release-assets/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

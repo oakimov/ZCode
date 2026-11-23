@@ -215,30 +215,47 @@ export function filterAndEnrichNativeCrashEvents(
 // ARMS 环境必须优先按运行形态标记为 local，避免开发数据污染 prod。
 const armsRumEnv = mapZCodeEnvToArmsRumEnv(desktopRuntimeEnv);
 
-// ARMS user.id 字段被 SDK 强制改写为内部随机值（config.user.id 在事件合并时被显式跳过，
-// 无法注入），而 user.name 不受屏蔽。这里把 device_mid 写入 user.name，使 RUM 日志可按
-// 设备维度关联。device_mid 复用 telemetry-state.json 同一持久化 UUID（与数仓 / preload 注入同源，
-// ensureDesktopDeviceMidSync 幂等且不重复写盘）。
-// 注意：渲染进程事件经 ArmsEventBridge 转发到主进程后，由主进程 client 用「主进程 config」
-// 重新打包上报，故只需在主进程 init 设置一次，即可覆盖主进程 + 渲染进程的全部上报。
-const armsDeviceMid = ensureDesktopDeviceMidSync();
+export const armsInitPromise = initializeArmsRum();
 
-// 原因：armsRum.init() 返回 Promise；若不 await，web-contents-created / 渲染进程注入可能晚于首窗 dom-ready，导致零上报。
-// 须在 app.whenReady() 创建 BrowserWindow 之前 await armsInitPromise（见 index.ts）。
-// SDK 的 sendCustom 只表示入队，原 request 不检查 HTTP status。
-// 在 init 通过公开 useReporter 安装时包装传输，保留原 SDK 的过滤和序列化链路。
-const useReporter = armsRum.client.useReporter.bind(armsRum.client);
-armsRum.client.useReporter = (reporter) => {
-  const request = reporter.request.bind(reporter);
-  reporter.request = wrapStartupReporterRequest(request, {
-    acknowledged: (eventIds, delivery) =>
-      logger.info("[database-startup] telemetry delivery", { eventIds, delivery }),
-  });
-  useReporter(reporter);
-};
-export const armsInitPromise = armsRum
-  .init({
-    enable: ZCODE_ARMS_RUM_ENDPOINT !== "",
+function initializeArmsRum(): Promise<void> {
+  // SDK 即使收到 enable=false 也会注册 preload 和 IPC；未配置端点时直接跳过初始化。
+  if (!ZCODE_ARMS_RUM_ENDPOINT) return Promise.resolve();
+
+  // ARMS user.id 字段被 SDK 强制改写为内部随机值（config.user.id 在事件合并时被显式跳过，
+  // 无法注入），而 user.name 不受屏蔽。这里把 device_mid 写入 user.name，使 RUM 日志可按
+  // 设备维度关联。device_mid 复用 telemetry-state.json 同一持久化 UUID（与数仓 / preload 注入同源，
+  // ensureDesktopDeviceMidSync 幂等且不重复写盘）。
+  // 注意：渲染进程事件经 ArmsEventBridge 转发到主进程后，由主进程 client 用「主进程 config」
+  // 重新打包上报，故只需在主进程 init 设置一次，即可覆盖主进程 + 渲染进程的全部上报。
+  const armsDeviceMid = ensureDesktopDeviceMidSync();
+
+  // 原因：armsRum.init() 返回 Promise；若不 await，web-contents-created / 渲染进程注入可能晚于首窗 dom-ready，导致零上报。
+  // 须在 app.whenReady() 创建 BrowserWindow 之前 await armsInitPromise（见 index.ts）。
+  // SDK 的 sendCustom 只表示入队，原 request 不检查 HTTP status。
+  // 在 init 通过公开 useReporter 安装时包装传输，保留原 SDK 的过滤和序列化链路。
+  const useReporter = armsRum.client.useReporter.bind(armsRum.client);
+  armsRum.client.useReporter = (reporter) => {
+    const request = reporter.request.bind(reporter);
+    reporter.request = wrapStartupReporterRequest(request, {
+      acknowledged: (eventIds, delivery) =>
+        logger.info("[database-startup] telemetry delivery", { eventIds, delivery }),
+    });
+    useReporter(reporter);
+  };
+  return armsRum
+    .init(buildArmsRumConfig(armsDeviceMid))
+    .then(() => {
+      logger.info(`[arms] electron initialized env=${armsRumEnv} version=${ZCODE_VERSION}`);
+    })
+    .catch((error) => {
+      logger.error("[arms] electron init failed:", error);
+      throw error;
+    });
+}
+
+function buildArmsRumConfig(armsDeviceMid: string): Parameters<typeof armsRum.init>[0] {
+  return {
+    enable: true,
     version: ZCODE_VERSION,
     endpoint: ZCODE_ARMS_RUM_ENDPOINT,
     env: armsRumEnv,
@@ -316,11 +333,5 @@ export const armsInitPromise = armsRum
       }
       return payload;
     },
-  })
-  .then(() => {
-    logger.info(`[arms] electron initialized env=${armsRumEnv} version=${ZCODE_VERSION}`);
-  })
-  .catch((error) => {
-    logger.error("[arms] electron init failed:", error);
-    throw error;
-  });
+  };
+}

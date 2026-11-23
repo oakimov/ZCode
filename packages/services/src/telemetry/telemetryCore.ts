@@ -421,8 +421,6 @@ export function createTelemetryCore(dependencies: TelemetryCoreDependencies = {}
     userId: string,
     deviceMid: string,
   ): Promise<void> {
-    // 构建期未配置事件上报端点时不上报（见 docs/desktop/build-time-optional-capabilities.md）
-    if (!REPORT_ENDPOINT) return;
     // body 的 client_language 与 X-Client-Language 同源，都取发送时刻的界面语言。
     const hostClientLanguage = dependencies.resolveClientLanguage?.()?.trim();
     const context = hostClientLanguage
@@ -564,6 +562,8 @@ export function createTelemetryCore(dependencies: TelemetryCoreDependencies = {}
       talkId?: string;
       messageId?: string;
     }): Promise<void> {
+      // 关闭时在入队前返回，避免读取凭据或创建上报专用状态。
+      if (!REPORT_ENDPOINT) return Promise.resolve();
       return trackReport(
         (async () => {
           const userId = input.userId ?? (await loadUserId());
@@ -596,6 +596,7 @@ export function createTelemetryCore(dependencies: TelemetryCoreDependencies = {}
     },
 
     reportAppLaunch(context: TelemetryRendererContext): Promise<void> {
+      if (!REPORT_ENDPOINT) return Promise.resolve();
       return trackReport(
         (async () => {
           const eventId = randomUUID();
@@ -620,6 +621,7 @@ export function createTelemetryCore(dependencies: TelemetryCoreDependencies = {}
     },
 
     reportAppDailyActive(context: TelemetryRendererContext): Promise<void> {
+      if (!REPORT_ENDPOINT) return Promise.resolve();
       return trackReport(
         (async () => {
           const timestamp = now();

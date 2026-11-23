@@ -31,9 +31,23 @@ async function resolvePushBase(root, head, remote) {
 }
 
 async function firstPushBase(root, head) {
-  // 首次推送没有 remote SHA；只使用已确认的集成分支，缺失时严格报错，不猜测其他分支。
-  const staging = await commit(root, "origin/staging");
-  return (await git(root, ["merge-base", staging, head])).toString().trim();
+  // 首次推送没有 remote SHA；fork 的 staging 可能缺失或没有共同历史。
+  const candidates = ["origin/staging", "origin/HEAD", "origin/main", "origin/master"];
+  for (const ref of candidates) {
+    const integration = await run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], {
+      cwd: root,
+      allowFailure: true,
+    });
+    if (integration.code === 1) continue;
+    if (integration.code !== 0) throw new Error(integration.stderr.toString().trim());
+    const result = await run("git", ["merge-base", integration.stdout.toString().trim(), head], {
+      cwd: root,
+      allowFailure: true,
+    });
+    if (result.code === 0) return result.stdout.toString().trim();
+    if (result.code !== 1) throw new Error(result.stderr.toString().trim());
+  }
+  throw new Error(`无法解析首次推送基线（尝试 ${candidates.join(", ")}）`);
 }
 
 /** 只解析比较基线；改动文件与关联测试全部由 Vitest 官方选择。 */

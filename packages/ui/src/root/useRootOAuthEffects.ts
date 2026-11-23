@@ -8,7 +8,6 @@ import type {
 } from "@zcode/shared";
 import { ZCODE_JWT_INVALID_BROADCAST_CHANNEL } from "@zcode/shared";
 import type { IServiceAccessor } from "@zcode/services";
-import { useAlertDialog } from "@/hooks/useAlertDialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { reportAppTelemetryEvent, resolveProviderTelemetryLabel } from "@/lib/appTelemetry.js";
 import { logger } from "@/logger.js";
@@ -17,10 +16,6 @@ import {
   refreshLatestModelProviderFamilySelectionAfterLogin,
   refreshRestoredOAuthProviderFamilyAfterStartup,
 } from "@/root/oauthProviderFamilySelectionRefresh.js";
-import {
-  applyCachedOAuthSessionRestoreResult,
-  requestOAuthReauthentication,
-} from "@/root/oauthCachedSessionRestore.js";
 import { shouldApplyOAuthPollingFailure } from "@/root/oauthLoginAttemptGuard.js";
 import { useAccountConnectionLossNotification } from "@/root/useAccountConnectionLossNotification.js";
 
@@ -84,7 +79,6 @@ export function useRootOAuthEffects({
   oauthPollingActive,
   setOAuthPollingActive,
   markOAuthSuccess,
-  onReauthenticationRequired,
 }: {
   accountIntentKey: string;
   platform: IPlatformService;
@@ -97,10 +91,8 @@ export function useRootOAuthEffects({
   oauthPollingActive: boolean;
   setOAuthPollingActive: (active: boolean) => void;
   markOAuthSuccess: (provider?: OAuthProviderId) => void;
-  onReauthenticationRequired: () => void;
 }) {
   useAccountConnectionLossNotification(services, accountIntentKey, refreshAppSettings);
-  const requestAlert = useAlertDialog();
   const { intl } = useZCodeIntl();
   const oauthLoginSucceededRef = useRef(false);
   const oauthLoginSuccessInFlightRef = useRef(false);
@@ -112,33 +104,24 @@ export function useRootOAuthEffects({
       logger.info("[Root] 后台启动 OAuth 本地会话恢复");
       let hasRestoredUser = false;
       try {
-        // 启动只读缓存及本地有效期；业务 token 已明确过期时直接重新登录，
-        // 不把无 exp 的历史凭据或暂时断网误判成退出。
+        // OAuth 服务清理过期缓存，公开 fork 只更新账号展示，不自动打开登录窗口。
         const result = await services.oauthService.restoreCachedSessionState();
 
         if (disposed) {
           return;
         }
 
-        hasRestoredUser = await applyCachedOAuthSessionRestoreResult({
-          result,
-          setUser,
-          requestAlert,
-          onReauthenticationRequired,
-          shouldReauthenticate: async () =>
-            !disposed && (await services.oauthService.getActiveProvider()) === null,
-          copy: {
-            title: intl.formatMessage({ id: "login.expired.title" }),
-            description: intl.formatMessage({ id: "login.expired.description" }),
-            actionLabel: intl.formatMessage({ id: "login.expired.action" }),
-          },
-        });
+        if (result.status === "authenticated") {
+          setUser(result.userInfo);
+          hasRestoredUser = true;
+        } else if (result.status === "reauthentication-required") {
+          const activeProvider = await services.oauthService.getActiveProvider();
+          if (!disposed && activeProvider === null) setUser(null);
+        }
       } catch (error) {
         logger.error("[Root] 恢复 OAuth 本地登录态失败:", error);
-        if (disposed) {
-          return;
-        }
       }
+      if (disposed) return;
 
       // 启动恢复是异步后台流程，慢网时如果不单独暴露“恢复中”状态，
       // sidebar 会先按 user=null 渲染成“登录”，而登录弹窗又还能读到本地 activeProvider，
@@ -178,50 +161,26 @@ export function useRootOAuthEffects({
     return () => {
       disposed = true;
     };
-  }, [
-    intl,
-    onReauthenticationRequired,
-    refreshAppSettings,
-    refreshProviderState,
-    requestAlert,
-    services,
-    setIsRestoringOAuthSession,
-    setUser,
-  ]);
+  }, [refreshAppSettings, refreshProviderState, services, setIsRestoringOAuthSession, setUser]);
 
   useEffect(() => {
     let disposed = false;
-    let promptPending = false;
     const disposable = services.broadcastService.onMessage((message) => {
-      if (message.channel !== ZCODE_JWT_INVALID_BROADCAST_CHANNEL || disposed || promptPending) {
-        return;
-      }
-      promptPending = true;
-      // 业务 token 撤销后仍显示头像并要求重启会阻断恢复；与启动过期共用 Welcome 登录入口。
-      void requestOAuthReauthentication({
-        setUser,
-        requestAlert,
-        onReauthenticationRequired: () => {
-          if (!disposed) onReauthenticationRequired();
-        },
-        shouldReauthenticate: async () =>
-          !disposed && (await services.oauthService.getActiveProvider()) === null,
-        copy: {
-          title: intl.formatMessage({ id: "login.expired.title" }),
-          description: intl.formatMessage({ id: "login.expired.description" }),
-          actionLabel: intl.formatMessage({ id: "login.expired.action" }),
-        },
-      })
-        .catch((error) => logger.error("[Root] 登录失效恢复提示失败", { error }))
-        .finally(() => {
-          promptPending = false;
-        });
+      if (message.channel !== ZCODE_JWT_INVALID_BROADCAST_CHANNEL || disposed) return;
+
+      // 广播可能早于另一个窗口重新登录；只清理仍然失效的展示态。
+      void services.oauthService
+        .getActiveProvider()
+        .then((activeProvider) => {
+          if (!disposed && activeProvider === null) setUser(null);
+        })
+        .catch((error) => logger.error("[Root] 登录失效后更新账号状态失败", { error }));
     });
     return () => {
       disposed = true;
       disposable.dispose();
     };
-  }, [intl, onReauthenticationRequired, requestAlert, services.broadcastService, setUser]);
+  }, [services.broadcastService, services.oauthService, setUser]);
 
   useEffect(() => {
     if (!oauthPollingActive) {

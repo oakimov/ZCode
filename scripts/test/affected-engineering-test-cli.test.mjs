@@ -192,6 +192,32 @@ test("Push 使用 remote SHA；新分支使用 staging 共同祖先；手动模�
   }
 });
 
+test("公开 fork 首推使用默认分支，找不到共同祖先的 staging 不阻碍回退", async (t) => {
+  const { write, git, base, invoke, hook } = await fixture(t);
+  const tree = (await git("rev-parse", "HEAD^{tree}")).trim();
+  const unrelated = (await git("commit-tree", tree, "-m", "unrelated history")).trim();
+  await git("update-ref", "refs/remotes/origin/staging", unrelated);
+  await git("update-ref", "refs/remotes/origin/release", base);
+  await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/release");
+  await write("source.mjs", "export const value = 2;");
+  await git("add", ".");
+  await git("commit", "-m", "feature");
+
+  const args = ["--scope", "push", "--dry-run", "--json"];
+  const overrides = await hook(zero);
+  for (const ref of ["refs/remotes/origin/staging", "refs/remotes/origin/release"]) {
+    const result = await invoke(args, overrides);
+    assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(paths(result), ["a.test.mjs"]);
+    await git("update-ref", "-d", ref);
+  }
+
+  await git("update-ref", "refs/remotes/origin/main", base);
+  const result = await invoke(args, overrides);
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(paths(result), ["a.test.mjs"]);
+});
+
 test("无基线、无效基线、非 HEAD 推送均报错；删除 ref 不测试", async (t) => {
   const { invoke, hook, base } = await fixture(t);
   for (const [args, env] of [

@@ -3623,9 +3623,10 @@ function seedE2EStartupState(specs: string[] = []) {
   writeFileSync(
     E2E_APP_CREDENTIALS_FILE,
     JSON.stringify(
-      // 原因：匿名回调失败用例不需要假 JWT；401 过期确认层会遮挡被测登录入口。
+      // 匿名场景即使借用登录/营销 mock 也要以空凭据冷启动。
       providerReadinessColdStartFixture ||
-        workerSpecsContain(specs, "oauth-login-failure-cancel.test.ts")
+        workerSpecsContain(specs, "oauth-login-failure-cancel.test.ts") ||
+        workerSpecsContain(specs, "marketing-touch-anonymous.test.ts")
         ? {}
         : // Bug 根因：I20 不验证账号登录，却播种假 ZCode JWT；带账号身份的旁路请求
           // 会把它发往真实控制面，401 随后弹出登录过期对话框并遮挡目标交互。

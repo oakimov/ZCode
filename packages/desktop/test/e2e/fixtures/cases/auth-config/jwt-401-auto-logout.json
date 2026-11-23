@@ -9,7 +9,7 @@
     {
       "kind": "app-config-seed",
       "path": "~/.zcode/v2/credentials.json",
-      "purpose": "隔离的 OAuth/共享 JWT 和独立 Bot 凭据；本地 HTTP fixture 控制真实 Host 余额请求401，验证清理后直接重新登录。"
+      "purpose": "隔离的 OAuth/共享 JWT 和独立 Bot 凭据；本地 HTTP fixture 控制真实 Host 余额请求401，验证清理后保留工作区，不打开登录窗口。"
     }
   ],
   "requests": []

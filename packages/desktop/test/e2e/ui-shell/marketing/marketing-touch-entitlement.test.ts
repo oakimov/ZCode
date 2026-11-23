@@ -23,7 +23,8 @@ import {
   waitForTestIdByDom,
 } from "#e2e/helpers/desktop-app";
 
-describe("Marketing Touch 领取后的权益与模型连接", () => {
+// 公开 fork 关闭这条投放链路；匿名回归验证关闭态。
+describe.skip("Marketing Touch 领取后的权益与模型连接", () => {
   after(async () => {
     await browser.electron.restoreAllMocks();
     await clearAppData();

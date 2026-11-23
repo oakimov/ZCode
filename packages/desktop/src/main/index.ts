@@ -4,7 +4,6 @@ import {
 } from "@desktop/main/browser-local-preview/index.js";
 import { createRemoteConversationTelemetryDispatcher } from "@zcode/shared/conversation-telemetry";
 import { installRequestSecurityDiagnostics } from "./request-security-edition/index.js";
-import { createLocalTtftExporter } from "./localTtftExporter.js";
 /* eslint-disable max-lines */
 import "./desktopEarlyDataBaseDirBootstrap.js";
 import "./desktopEarlyChromiumHardwareAccelerationBootstrap.js";
@@ -83,6 +82,8 @@ import {
   type AppSettings,
   type appSettingsPatchSchema,
   PlatformChannels,
+  DISABLED_RENDERER_ACTION_TRACE_CONFIG,
+  ZCODE_ARMS_RUM_ENDPOINT,
   ZCODE_ENV,
   ZCODE_PRODUCT_FLAVOR,
   ZCODE_AUTO_UPDATE_ENABLED,
@@ -121,10 +122,6 @@ import { TaskRealtimeBus } from "./taskRealtimeBus.js";
 import { createAppLaunchGate } from "./appLaunchGate.js";
 import { createAppLaunchCoordinator } from "./appLaunchCoordinator.js";
 import { createAppTelemetryRuntime } from "./appTelemetryRuntime.js";
-import { createRendererActionTraceBroker } from "./rendererActionTraceBroker.js";
-import { createRendererActionTraceExporter } from "./rendererActionTraceExporter.js";
-import { registerRendererActionTraceIpc } from "./rendererActionTraceIpc.js";
-import { createRendererActionTraceRollout } from "./rendererActionTraceRollout.js";
 import {
   resolveAppShutdownPolicy,
   selectAppShutdownPolicy,
@@ -887,7 +884,7 @@ function syncAppTelemetryInteractiveState(): void {
     ),
   );
   // 登出/切号发生在 host 子进程，主进程无即时信号；窗口聚焦时兜底刷新 ARMS user.name
-  void armsUserIdentitySync.refresh();
+  armsUserIdentitySync?.refresh();
 }
 
 app.on("browser-window-focus", (_event, win) => {
@@ -949,30 +946,12 @@ desktopContextPromptRollout = createDesktopContextPromptRollout({
   fetchConfig: electronClientConfigsFetcher,
   logger,
 });
-const rendererActionTraceRollout = createRendererActionTraceRollout({
-  fetchConfig: electronClientConfigsFetcher,
-  logger,
-});
-const localTtftExporter = createLocalTtftExporter({
-  env: { ...hostProcessLocalEnv, ...process.env },
-  version: ZCODE_VERSION || app.getVersion(),
-  logger,
-});
-ipcMain.on(PlatformChannels.ReportLocalTtftBatch, (_event, batch: unknown) =>
-  localTtftExporter.enqueue(batch),
-);
-const rendererActionTraceBroker = createRendererActionTraceBroker({
-  exporter: createRendererActionTraceExporter({
-    ...hostProcessLocalEnv,
-    ...process.env,
-  }),
-  logger,
-});
-let disposeRendererActionTraceIpc: (() => void) | undefined;
-const armsUserIdentitySync = createArmsUserIdentitySync({
-  deviceMid,
-  setUser: (user) => armsRum.setConfig("user", user),
-});
+const armsUserIdentitySync = ZCODE_ARMS_RUM_ENDPOINT
+  ? createArmsUserIdentitySync({
+      deviceMid,
+      setUser: (user) => armsRum.setConfig("user", user),
+    })
+  : undefined;
 const webRemoteControlAppVersion = ZCODE_VERSION || app.getVersion();
 const defaultZCodeEndpointUrls = buildZCodeEndpointUrls(DEFAULT_ZCODE_ENDPOINT_ORIGIN, {
   appVersion: webRemoteControlAppVersion,
@@ -1316,8 +1295,7 @@ async function prepareAppQuit(reason: string, kind: AppShutdownKind = "normal"):
   stopDesktopZCodeDataSizeTelemetry();
   stopDesktopNetworkTelemetry();
   stopRemoteUsageArmsPeriodicSampling();
-  disposeRendererActionTraceIpc?.();
-  disposeRendererActionTraceIpc = undefined;
+  ipcMain.removeHandler(PlatformChannels.GetRendererActionTraceConfig);
   notifyStabilityAppExit(
     getStabilityLifecycleScene() === "update_install" ? "update_install" : "app_quit",
     logger,
@@ -1342,11 +1320,7 @@ async function prepareAppQuit(reason: string, kind: AppShutdownKind = "normal"):
     // 修复原因：Main 过去不会等待仍在发送的 /event/report，正常退出也会直接丢事件。
     // 与其它 owner 并行进入既有屏障，最多等待 2 秒，避免 telemetry 串行放大退出预算。
     appTelemetryCore.flushPendingReports({ timeoutMs: 2_000 }),
-    localTtftExporter.shutdown(),
     flushLocalTtftLogs(),
-    rendererActionTraceBroker.shutdown().catch((error) => {
-      logger.warn(`[app-quit] renderer action trace shutdown failed (${reason}):`, error);
-    }),
     // 旧流程先等待 Cron 的 1.5s deadline，再启动 Host timer，导致声明的
     // 4.5s/9s 退出总预算被串行放大。两类 owner 无关闭依赖，统一并行进入同一屏障。
     (async () => {
@@ -2606,18 +2580,17 @@ app.whenReady().then(async () => {
     deviceMid,
   });
 
-  disposeRendererActionTraceIpc = registerRendererActionTraceIpc({
-    rollout: rendererActionTraceRollout,
-    broker: rendererActionTraceBroker,
-    env: process.env,
-    logger,
-  });
+  // 本 fork 在 Main 保留查询契约，始终关闭 OTLP：不创建 exporter、rollout 或上报监听。
+  ipcMain.handle(
+    PlatformChannels.GetRendererActionTraceConfig,
+    () => DISABLED_RENDERER_ACTION_TRACE_CONFIG,
+  );
 
   registerRemoteIpcHandlers({
     logger,
     appTelemetryRuntime,
     onOAuthCallbackHandledSideEffect: () => {
-      void armsUserIdentitySync.refresh();
+      armsUserIdentitySync?.refresh();
     },
     appTelemetryCore,
     reportRemoteUsageEvent: reportRemoteUsageEventForRenderer,
@@ -2668,7 +2641,7 @@ app.whenReady().then(async () => {
   await armsInitPromise;
 
   // ARMS init 完成后首次写入 user.name（落 device_mid）
-  void armsUserIdentitySync.refresh();
+  armsUserIdentitySync?.refresh();
 
   configureDesktopStabilityTelemetry({
     deviceMid,
@@ -2716,32 +2689,18 @@ app.whenReady().then(async () => {
   });
   registerDesktopNetworkTelemetry(logger);
 
-  // 本地未打包 dev 构建（app.isPackaged === false）必须跳过远端强制升级 gate。
-  // 原因：force-update gate 只看 ZCODE_ENV === "production"，但 dev 构建（如 dev:desktop:cua
-  // 连真实后端测 computer use）虽指向 production 后端，版本号却滞后于线上 release（feature
-  // 分支不 bump 版本），会被 release minimalVersion 误判为"需强制升级"而启动秒退。force-update
-  // 是面向打包发布客户端的安全门，对未打包 dev 运行时无意义。打包版 app.isPackaged === true，
-  // gate 照常生效，对真实用户零影响。
-  const skipForceUpdateForLocalDevRuntime = !app.isPackaged;
-  const forceUpdateGuardResult =
-    ZCODE_PRODUCT_FLAVOR === "production" && !skipForceUpdateForLocalDevRuntime
-      ? await maybeBlockStartupForForceUpdate({
-          resolveZcodeJwtToken: () => autoUpdateCredentialService.load("zcodejwttoken"),
-          locale: currentApplicationLocale,
-          logger,
-          endpointOrigin: await resolveCurrentZCodeEndpointOrigin(),
-          onBlocked: () => {
-            forceUpdateMainWindowCreationBlocked = true;
-          },
-        })
-      : { blocked: false };
-  if (ZCODE_PRODUCT_FLAVOR !== "production") {
-    logger.info("[force-update] Preview 跳过远端强制升级检查");
-  } else if (skipForceUpdateForLocalDevRuntime) {
-    logger.info("[force-update] 本地 dev 构建（未打包）跳过远端强制升级检查");
-  }
-  if (forceUpdateGuardResult.blocked) {
-    return;
+  // 强更原来绕开了构建期开关，生产安装包仍会携带凭据查询最低版本并阻断主窗口。
+  if (ZCODE_PRODUCT_FLAVOR === "production" && ZCODE_AUTO_UPDATE_ENABLED && app.isPackaged) {
+    const result = await maybeBlockStartupForForceUpdate({
+      resolveZcodeJwtToken: () => autoUpdateCredentialService.load("zcodejwttoken"),
+      locale: currentApplicationLocale,
+      logger,
+      endpointOrigin: await resolveCurrentZCodeEndpointOrigin(),
+      onBlocked: () => {
+        forceUpdateMainWindowCreationBlocked = true;
+      },
+    });
+    if (result.blocked) return;
   }
 
   logger.info("[startup] 创建主窗口");
