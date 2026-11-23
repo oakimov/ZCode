@@ -50,17 +50,24 @@ Effective Request Option values
         v
 有序 JSON Merge Patches
         |
-        v
-AI SDK 已完成协议序列化和 Schema 兼容的原始 JSON Body
+        +-- HTTP api.type --> 原始 JSON Body（见下）
+        `-- ai-sdk-module --> AI SDK call options 对象
+                { maxOutputTokens?, providerOptions? }
         |
         | 应用 Patch，并记录 Model IO
         v
 业务 Header / 动态鉴权 / 请求安全校验 / 网络发送
+（module 种类跳过 HTTP 链；Patch 结果进入 doGenerate / doStream 的 call options）
 ```
 
 Map 必须在 AI SDK 和协议兼容层已经形成最终 JSON Body 之后、动态请求安全校验之前应用。`generateText()` 与
 `streamText()` 共用同一个执行器；Model IO 捕获的是 Patch 后真正发送的请求体。Runtime 不再同时传递
 AI SDK 标准 `maxOutputTokens` 或 reasoning namespace，否则会形成第二份请求字段权威。
+
+对 `api.type: "ai-sdk-module"`，同一套编译后的 Map 以 RFC 7396 语义合并到 call options 对象；
+Patch 根键只允许 `maxOutputTokens` 与 `providerOptions`，其他键在编译/应用时拒绝。默认
+`modelApiRules` 为该 API 类型提供中性 `providerOptions.zcode.reasoningLevel` 与 `maxOutputTokens`
+透传；模块可用自身 Rules 覆盖到自己的 `providerOptions` 命名空间。
 
 ## 受限 CEL
 
@@ -131,6 +138,10 @@ OpenAI Chat Completions
 OpenAI Responses
 ├─ reasoningLevel -> reasoning.effort
 └─ maxOutputTokens -> max_output_tokens
+
+AI SDK Module
+├─ reasoningLevel -> providerOptions.zcode.reasoningLevel（默认；可被模块 Rules 覆盖）
+└─ maxOutputTokens -> maxOutputTokens（call options）
 ```
 
 具体表达只属于命中 `providerId/modelId/api.type/baseURL` 的 Model Config Rule。Runtime 与 Adapter 禁止根据

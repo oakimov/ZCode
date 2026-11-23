@@ -29,7 +29,7 @@ export interface AiSdkMessageTransformOptions {
   toolSearchEnabled?: boolean;
   apiFormat?: string;
   providerOptions?: Record<string, unknown>;
-  providerKind?: "openai" | "anthropic" | "openai-compatible" | "gateway" | "custom";
+  providerKind?: "openai" | "anthropic" | "openai-compatible" | "module" | "gateway" | "custom";
   stripMedia?: boolean;
   inputFormat?: ModelInputFormat;
 }

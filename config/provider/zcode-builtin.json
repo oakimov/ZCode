@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": 44,
+  "revision": 45,
   "config": {
     "providerConfigRules": {
       "templateRules": [
@@ -3637,6 +3637,20 @@
             "optionSpecs": {
               "reasoningLevel": {
                 "map": "{\n  \"reasoning\": {\n    \"effort\": reasoningLevel\n  }\n}"
+              }
+            }
+          }
+        },
+        {
+          "modelMatch": ".*",
+          "apiTypeMatch": "ai-sdk-module",
+          "config": {
+            "optionSpecs": {
+              "reasoningLevel": {
+                "map": "{\n  \"providerOptions\": {\n    \"zcode\": {\n      \"reasoningLevel\": reasoningLevel\n    }\n  }\n}"
+              },
+              "maxOutputTokens": {
+                "map": "{'maxOutputTokens': maxOutputTokens}"
               }
             }
           }

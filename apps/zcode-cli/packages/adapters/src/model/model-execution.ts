@@ -27,6 +27,7 @@ import { createModelRequestSecurityState } from "./request-security-edition/inde
 import type { ModelRequestSecurityState, ModelRequestSecurityPort } from "./request-security.js";
 import { createOpenAIResponsesJsonCompatFetch } from "./openai-responses-json-compat.js";
 import { createModelOptionMapFetch, type RawRequestBodyCapture } from "./model-option-map-fetch.js";
+import { createModuleLanguageModelFactory } from "./model-execution-module.js";
 import { createNetworkProxyFetch } from "../network/proxy-fetch.js";
 import { createProviderEndpointRoutingFetch } from "./provider-endpoint-routing-fetch.js";
 import { normalizeModelTlsFailure } from "./failure-tls.js";
@@ -36,7 +37,7 @@ import {
   withoutContextOwnedModelHeaders,
 } from "./model-request-headers.js";
 
-export type AiSdkProviderKind = "openai" | "anthropic" | "openai-compatible";
+export type AiSdkProviderKind = "openai" | "anthropic" | "openai-compatible" | "module";
 
 export type EnvRecord = Record<string, string | undefined>;
 
@@ -44,10 +45,13 @@ interface AiSdkProviderConfig {
   access: RegistryProviderConfig["access"];
   kind: AiSdkProviderKind;
   apiKey?: string;
-  baseURL: string;
+  baseURL?: string;
   headers?: Record<string, string>;
   providerOptions?: Record<string, unknown>;
   name?: string;
+  module?: string;
+  exportName?: string | null;
+  moduleOptions?: Readonly<Record<string, unknown>> | null;
 }
 
 export interface AiSdkModelExecutionConfig {
@@ -292,6 +296,23 @@ export class AiSdkModelExecution {
     supportsJsonSchemaOutput: boolean,
     apiKeyId?: string,
   ): LanguageModelFactory {
+    if (providerConfig.kind === "module") {
+      if (!providerConfig.module) {
+        throw new Error(`ai-sdk-module provider ${providerId} is missing module path`);
+      }
+      // 模块路径跳过 HTTP transport / request-security / option-map-fetch；
+      // Option Map 在 ModuleLanguageModel 内合并到 call options。
+      return createModuleLanguageModelFactory({
+        providerId,
+        module: providerConfig.module,
+        exportName: providerConfig.exportName,
+        options: providerConfig.moduleOptions,
+        optionMaps,
+        optionValues,
+        rawRequestBodyCapture,
+      });
+    }
+
     const apiKey = this.resolveApiKey(providerConfig);
     // SDK 会合并 factory 默认 header；必须在这里去掉静态来源，才能保证缺失时真正省略。
     const headers = withoutContextOwnedModelHeaders(providerConfig.headers);
@@ -310,7 +331,11 @@ export class AiSdkModelExecution {
       : networkTransport;
     const requestTransport = this.requestSecurity.protectTransport({
       providerId,
-      providerConfig,
+      providerConfig: {
+        ...providerConfig,
+        // HTTP kinds always carry baseURL after schema validation.
+        baseURL: providerConfig.baseURL ?? "",
+      },
       transport: providerTransport,
     });
     const fetch = createProviderBusinessErrorFetch({
@@ -343,7 +368,7 @@ export class AiSdkModelExecution {
       case "anthropic": {
         const provider = createAnthropic({
           apiKey,
-          baseURL: normalizeAnthropicBaseURL(providerConfig.baseURL),
+          baseURL: normalizeAnthropicBaseURL(providerConfig.baseURL ?? ""),
           fetch: createAnthropicCompatFetch(optionFetch),
           headers: withAnthropicAuthorizationHeader(apiKey, headers),
         });
@@ -353,7 +378,7 @@ export class AiSdkModelExecution {
       case "openai-compatible": {
         const provider = createOpenAICompatible<string, string, string, string>({
           name: providerConfig.name ?? providerId,
-          baseURL: providerConfig.baseURL,
+          baseURL: providerConfig.baseURL ?? "",
           apiKey,
           fetch: optionFetch,
           headers,
@@ -402,8 +427,21 @@ function toAiSdkProviderConfig(
   providerId: string,
   config: RegistryProviderConfig,
 ): AiSdkProviderConfig {
+  if (config.api.type === "ai-sdk-module") {
+    return {
+      kind: "module",
+      access: config.access,
+      module: config.api.module,
+      exportName: config.api.export,
+      moduleOptions: config.api.options,
+      providerOptions: { apiFormat: config.api.type },
+    };
+  }
+
   const common = {
-    ...(config.access.type !== "zhipu-account" && config.access.apiKey
+    ...(config.access.type !== "zhipu-account" &&
+    config.access.type !== "none" &&
+    config.access.apiKey
       ? { apiKey: config.access.apiKey }
       : {}),
     baseURL: config.api.baseUrl,
@@ -418,8 +456,11 @@ function toAiSdkProviderConfig(
       return { kind: "openai", ...common };
     case "openai-chat-completions":
       return { kind: "openai-compatible", name: providerId, ...common };
+    default: {
+      const exhaustive: never = config.api;
+      throw new Error(`Unsupported Provider API type: ${String((exhaustive as { type?: string }).type)}`);
+    }
   }
-  throw new Error(`Unsupported Provider API type: ${String(config.api.type)}`);
 }
 
 function applyModelRequestAuth(

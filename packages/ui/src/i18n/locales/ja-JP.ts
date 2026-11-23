@@ -4257,6 +4257,8 @@ const jaJP: Record<string, string> = {
   "settings.modelProvider.apiFormat.title.chatCompletions": "Chat completions",
   "settings.modelProvider.apiFormat.title.responses": "Responses",
   "settings.modelProvider.apiFormat.title.anthropicMessages": "Anthropic messages",
+  "settings.modelProvider.apiFormat.title.aiSdkModule": "外部モジュール",
+  "settings.modelProvider.modulePath": "モジュールパス",
   "settings.modelProvider.anthropicEndpoint": "Anthropic エンドポイント",
   "settings.modelProvider.anthropicEndpointPlaceholder": "例: https://api.anthropic.com",
   "settings.modelProvider.openaiEndpoint": "OpenAI エンドポイント",

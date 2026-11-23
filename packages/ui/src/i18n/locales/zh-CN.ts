@@ -4201,6 +4201,8 @@ const zhCN: Record<string, string> = {
   "settings.modelProvider.apiFormat.title.chatCompletions": "Chat Completions",
   "settings.modelProvider.apiFormat.title.responses": "Responses",
   "settings.modelProvider.apiFormat.title.anthropicMessages": "Anthropic Messages",
+  "settings.modelProvider.apiFormat.title.aiSdkModule": "外部模块",
+  "settings.modelProvider.modulePath": "模块路径",
   "settings.modelProvider.anthropicEndpoint": "Anthropic 接口地址",
   "settings.modelProvider.anthropicEndpointPlaceholder":
     "如：https://open.bigmodel.cn/api/anthropic",

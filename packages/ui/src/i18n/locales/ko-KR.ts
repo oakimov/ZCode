@@ -4155,6 +4155,8 @@ const koKR: Record<string, string> = {
   "settings.modelProvider.apiFormat.title.chatCompletions": "Chat completions",
   "settings.modelProvider.apiFormat.title.responses": "Responses",
   "settings.modelProvider.apiFormat.title.anthropicMessages": "Anthropic messages",
+  "settings.modelProvider.apiFormat.title.aiSdkModule": "외부 모듈",
+  "settings.modelProvider.modulePath": "모듈 경로",
   "settings.modelProvider.anthropicEndpoint": "Anthropic 엔드포인트",
   "settings.modelProvider.anthropicEndpointPlaceholder": "예: https://api.anthropic.com",
   "settings.modelProvider.openaiEndpoint": "OpenAI 엔드포인트",

@@ -4498,6 +4498,8 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.apiFormat.title.chatCompletions": "Chat completions",
   "settings.modelProvider.apiFormat.title.responses": "Responses",
   "settings.modelProvider.apiFormat.title.anthropicMessages": "Anthropic messages",
+  "settings.modelProvider.apiFormat.title.aiSdkModule": "External module",
+  "settings.modelProvider.modulePath": "Module path",
   "settings.modelProvider.anthropicEndpoint": "Anthropic endpoint",
   "settings.modelProvider.anthropicEndpointPlaceholder": "e.g. https://api.anthropic.com",
   "settings.modelProvider.openaiEndpoint": "OpenAI endpoint",

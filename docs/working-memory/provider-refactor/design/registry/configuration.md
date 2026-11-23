@@ -280,15 +280,32 @@ Effective Provider、Registry Config 与 Settings DTO 中，`group` 必须完整
 ### API
 
 ```ts
-interface ProviderApiConfig {
-  type?: "anthropic-messages" | "openai-chat-completions" | "openai-responses" | null;
-  baseURL?: string | null;
-  headers?: Readonly<Record<string, string>> | null;
-}
+type ProviderApiConfig =
+  | {
+      type?: "anthropic-messages" | "openai-chat-completions" | "openai-responses" | null;
+      baseURL?: string | null;
+      headers?: Readonly<Record<string, string>> | null;
+    }
+  | {
+      type: "ai-sdk-module";
+      /** Absolute filesystem path or `file:` URL to an ESM module. */
+      module: string;
+      /** Named export; default `createProvider`. */
+      export?: string | null;
+      /** JSON-serializable options passed verbatim to the export. May contain secrets. */
+      options?: Readonly<Record<string, unknown>> | null;
+    };
 ```
 
-`api.type` 描述公开协议；`baseURL` 是当前 Environment 中该 Provider 的静态请求入口；`headers` 是静态
-Header。Endpoint 不能由 Model ID 推断，也不能放入普通 Turn 的 Runtime Provider 快照。
+`api.type` 描述公开协议或进程内模块装配。HTTP 类型的 `baseURL` 是当前 Environment 中该 Provider 的静态
+请求入口；`headers` 是静态 Header。Endpoint 不能由 Model ID 推断，也不能放入普通 Turn 的 Runtime
+Provider 快照。
+
+`ai-sdk-module` 不使用 `baseURL` / `headers`；完整 Config 拒绝这两项，并由 Worker 内
+`ModuleProviderLoader` 按绝对路径 `import()` 模块。相对路径、裸包名和其他 URL scheme 一律拒绝。
+模块在 Core Worker 进程内以 Worker 权限运行，信任边界与可写 `provider_config.json` 的主体相同（与
+plugin hooks 同级）。详见 CLI 规范
+[`apps/zcode-cli/docs/design/v2/model/ai-sdk-module-provider.md`](../../../../../apps/zcode-cli/docs/design/v2/model/ai-sdk-module-provider.md)。
 
 ### Access
 
@@ -303,10 +320,15 @@ type ProviderAccessConfig =
       type: "zhipu-account";
       accountType: "zai" | "bigmodel";
       mode: "start-plan" | "individual-coding-plan" | "team-coding-plan" | "off-peak";
+    }
+  | {
+      type: "none";
     };
 ```
 
-`access.type` 描述访问材料的一级来源，和 `api.type` 正交。`zhipu-account.mode` 是智谱账号产品的
+`access.type` 描述访问材料的一级来源，和 `api.type` 正交，但 `none` 与 `ai-sdk-module` 双向绑定：
+完整 Config 中 `api.type: "ai-sdk-module"` 只接受 `access.type: "none"`，且 `none` 只与该 API 类型合法。
+模块自行鉴权；ZCode 不向模块注入凭据、环境变量或 Endpoint。`zhipu-account.mode` 是智谱账号产品的
 有限枚举：官方版本请求安全校验的准入与 Off-Peak 协议都由 Mode 分派。Z.AI API 与
 BigModel API Template 创建的实例使用普通 `api-key` Access，不进入 V4，也不建立所有 Access 可填的伪通用字段。
 动态安全校验材料、
@@ -332,6 +354,11 @@ product、organization、project 和动态凭据不进入 Provider Config 或 Ac
 
 Personal 对普通 `api-key` Access 使用整体替代语义；固定 `account:*` Provider 的 Personal Source
 不允许写入 `access`。当前账号是否存在兼容连接由 Request Auth 在请求期判断，服务端做最终授权。
+
+#### none
+
+仅用于 `ai-sdk-module`。Effective Config 无静态 Key 或账号材料；模块在 `createProvider(options)` 内
+自行完成鉴权与网络。Settings 对模块 Provider 只读展示路径，不提供 Key / Base URL 编辑。
 
 ### 凭据原则
 
@@ -480,7 +507,7 @@ GLM 模型与公开 GLM 模型的共同事实，但账号、Endpoint 或 API Sch
 | 5    | `providerMatch + modelMatch + apiMatch`，按需增加 `baseURLMatch` | 同一服务下 API Schema 或 Endpoint 仍造成的最终差异             |
 
 同一模型具有多种 API Schema 时，API 特化紧跟该模型的公共事实连续排列，使用稳定顺序：
-`anthropic-messages`、`openai-chat-completions`、`openai-responses`。不存在的组合不写空规则。限定到某个
+`anthropic-messages`、`openai-chat-completions`、`openai-responses`、`ai-sdk-module`。不存在的组合不写空规则。限定到某个
 家族的 Provider/Service 规则仍放在该家族内；只有确实覆盖多个无关模型家族的规则才放到数组末尾的
 Cross-model 区域。
 

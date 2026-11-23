@@ -82,7 +82,11 @@ export interface ElectronRendererContentSizeSnapshot {
  * 它只描述测试需要观察的字段，不是 Provider 配置事实源，也不参与运行时装配。
  */
 export interface E2EModelProviderSnapshot {
-  apiFormat: "anthropic-messages" | "openai-chat-completions" | "openai-responses";
+  apiFormat:
+    | "anthropic-messages"
+    | "openai-chat-completions"
+    | "openai-responses"
+    | "ai-sdk-module";
   apiKey: string;
   apiKeyRequired?: boolean;
   createdAt: number;
@@ -757,7 +761,7 @@ function convertPersonalProviderConfig(
         paths: { [kind]: "" },
       },
       apiFormat: provider.api?.type ?? "openai-chat-completions",
-      apiKeyRequired: true,
+      apiKeyRequired: isApiKeyAccess(provider.access),
       // 套餐手动 Key 同样是 API Key；仅识别普通类型会把已保存凭据误报为空。
       apiKey: isApiKeyAccess(provider.access) ? provider.access.apiKey?.trim() || "" : "",
       defaultKind: kind,
@@ -811,6 +815,7 @@ function mapPersonalProviderKind(provider: ProviderConfig): E2EProviderKind {
     case "openai-responses":
       return "openai";
     case "openai-chat-completions":
+    case "ai-sdk-module":
     case null:
     case undefined:
       return "openai-compatible";

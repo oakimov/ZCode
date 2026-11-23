@@ -14,7 +14,7 @@ type AiSdkUserContentParts = Extract<AiSdkUserContent, unknown[]>;
 
 interface ToolResultMediaProjectionOptions {
   apiFormat?: string;
-  providerKind?: "openai" | "anthropic" | "openai-compatible" | "gateway" | "custom";
+  providerKind?: "openai" | "anthropic" | "openai-compatible" | "module" | "gateway" | "custom";
   stripMedia?: boolean;
   inputFormat?: ModelInputFormat;
   toolName: string;
